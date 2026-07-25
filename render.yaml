@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: runrate-mexico-live
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: REDSHIFT_HOST
+        sync: false
+      - key: REDSHIFT_PORT
+        value: "5439"
+      - key: REDSHIFT_DB
+        sync: false
+      - key: REDSHIFT_USER
+        sync: false
+      - key: REDSHIFT_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: "claude-haiku-4-5-20251001"

@@ -1,0 +1,3235 @@
+<!DOCTYPE html>
+<!--
+  Runrate Mexico Live — Foodology
+  Convertido desde un artefacto de Cowork para correr como app standalone.
+  Las consultas SQL y las llamadas a Claude ya no van a window.cowork.*,
+  van a /api/query y /api/ask-claude servidos por server.js (ver README.md).
+-->
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Runrate de Ventas — México / Colombia / Perú</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridjs@5.0.2/dist/theme/mermaid.min.css" integrity="sha384-jZvDSsmGB9oGGT/4l9bHXGoAv1OxvG/cFmSo0dZaSqmBgvQTKDBFAMftlXTmMbNW" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/gridjs@5.0.2/dist/gridjs.umd.js" integrity="sha384-/XXDzxe4FsGiAe50i/u9pY/Vy/uX654MHB1xoc1BJNnH1WXHhqHga9g3q5tF4gj7" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<style>
+:root {
+  color-scheme: light;
+  /* Paleta Foodology (brandbook 2022): Azul Foodology #14225B (principal, 50%),
+     Base Crema #E8D2AE (secundario, 30-10%), Comunidad #DF99B9 (acento, 5%) */
+  --accent: #14225B;
+  --accent-dark: #0c1640;
+  --accent-soft: #eef0f7;
+  --cream: #E8D2AE;
+  --cream-soft: #faf6ee;
+  --pink: #DF99B9;
+  --pos: #0a8a4a;
+  --pos-soft: #e8f7ee;
+  --neg: #d1453d;
+  --neg-soft: #fdeceb;
+  --bg: #faf8f4;
+  --surface: #ffffff;
+  --border: #e9e3d6;
+  --text: #14171f;
+  --text-soft: #6b6f80;
+  --radius: 14px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { padding: 22px 26px 48px; max-width: 1280px; margin: 0 auto; }
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.brand-logo { height: 22px; width: auto; display: block; margin-bottom: 10px; }
+.brand-dot { color: var(--pink); }
+h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: -0.01em; font-weight: 800; }
+.subtitle { color: var(--text-soft); font-size: 13px; }
+.header-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: #fafafa; border-color: #d7d7de; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn svg { width: 13px; height: 13px; }
+
+.banner {
+  background: #fff7e6;
+  border: 1px solid #f0c36d;
+  color: #7a5b00;
+  padding: 11px 15px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: none;
+}
+.banner.show { display: block; }
+
+.pos { color: var(--pos); }
+.neg { color: var(--neg); }
+.neutral { color: var(--text-soft); }
+
+.growth-pill { display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 12.5px; line-height: 1.5; white-space: nowrap; }
+.growth-pill.pos { background: var(--pos-soft); color: var(--pos); }
+.growth-pill.neg { background: var(--neg-soft); color: var(--neg); }
+.growth-pill.neutral { background: #f1f1f3; color: var(--text-soft); }
+.growth-pill .growth-abs { font-weight: 500; opacity: .8; font-size: 11.5px; }
+
+.totals-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  border-radius: var(--radius);
+  padding: 18px 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 14px rgba(20,34,91,0.18);
+  flex-wrap: wrap;
+}
+.totals-strip .tstat {
+  flex: 1;
+  min-width: 150px;
+  padding: 4px 22px;
+  border-right: 1px solid rgba(255,255,255,0.14);
+}
+.totals-strip .tstat:last-child { border-right: none; }
+.totals-strip .tstat .tlabel { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: rgba(255,255,255,0.62); margin-bottom: 6px; }
+.totals-strip .tstat .tvalue { font-size: 21px; font-weight: 800; color: #fff; letter-spacing: -0.01em; }
+.totals-strip .tstat .tvalue .growth-pill { background: rgba(255,255,255,0.16); color: #fff; }
+.totals-strip .tstat .tvalue .growth-pill.pos { background: rgba(255,255,255,0.18); color: #d7ffe8; }
+.totals-strip .tstat .tvalue .growth-pill.neg { background: rgba(255,255,255,0.14); color: #ffd9d4; }
+.totals-strip .tstat .tsub { font-size: 11.5px; color: rgba(255,255,255,0.55); margin-top: 4px; }
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.tabs { display: flex; gap: 4px; background: var(--bg); padding: 4px; border-radius: 10px; }
+.tab-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 15px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab-btn.active { background: var(--surface); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; }
+.tab-btn.active::after { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--pink); }
+.lookback { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-soft); font-weight: 600; }
+.seg { display: flex; background: var(--bg); padding: 4px; border-radius: 10px; }
+.seg-btn { border: none; background: transparent; padding: 7px 12px; border-radius: 8px; font-size: 12.5px; cursor: pointer; color: var(--text-soft); font-weight: 600; }
+.seg-btn.active { background: var(--accent); color: #fff; }
+.currency-check { font-size: 11.5px; font-weight: 600; }
+.currency-check.ok { color: var(--pos); }
+.currency-check.bad { color: var(--neg); }
+.status { font-size: 11.5px; color: #aaa; margin-left: auto; }
+.auto-refresh { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-soft); font-weight: 600; cursor: pointer; user-select: none; }
+.auto-refresh input { cursor: pointer; accent-color: var(--accent); }
+.last-updated { font-size: 11px; color: #b3b3ba; }
+.section-note { font-size: 12.5px; color: var(--text-soft); margin: 2px 2px 12px; line-height: 1.5; }
+
+/* Filtros */
+.filters-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.filters-bar .filter-group { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-soft); font-weight: 600; }
+.filters-bar select { border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font-size: 12.5px; color: var(--text); background: var(--bg); max-width: 200px; }
+.filters-bar select:focus { outline: none; border-color: var(--accent); }
+.filters-clear { border: none; background: transparent; color: var(--accent); font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 4px 6px; }
+.filters-clear:hover { text-decoration: underline; }
+
+/* Insights */
+.insights-card { display: none; gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+.insights-card.show { display: grid; grid-template-columns: 1fr 1fr; }
+.insights-col { padding: 14px 18px; }
+.insights-col:first-child { border-right: 1px solid var(--border); }
+.insights-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-soft); margin-bottom: 10px; }
+.insights-title .insights-sub { text-transform: none; font-weight: 500; letter-spacing: 0; opacity: .75; }
+.insight-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.insight-item:last-child { border-bottom: none; }
+.insight-name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.insight-empty { font-size: 12.5px; color: var(--text-soft); font-style: italic; padding: 6px 0; }
+
+/* Físicos */
+.physical-note { font-size: 12.5px; color: var(--text-soft); margin: 2px 2px 14px; line-height: 1.5; }
+.physical-chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-top: 14px; }
+.physical-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.physical-chart-head select { border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font-size: 12.5px; }
+.physical-chart-wrap { position: relative; height: 280px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px;
+  box-shadow: 0 1px 2px rgba(16,16,20,0.03);
+}
+.loading { padding: 46px; text-align: center; color: #999; font-size: 13px; }
+
+table.gridjs-table { font-size: 12.5px; width: 100%; }
+th.gridjs-th { background: #fbfbfc !important; color: var(--text-soft); font-weight: 700 !important; font-size: 9.5px !important; text-transform: uppercase; letter-spacing: .015em; white-space: normal !important; line-height: 1.3; padding-top: 8px !important; padding-bottom: 8px !important; vertical-align: middle; }
+td.gridjs-td { border-color: #f0f0f2 !important; }
+.gridjs-tbody tr:hover td { background: #fafafe !important; }
+.gridjs-search-input { font-size: 13px; border-radius: 8px !important; }
+.gridjs-pagination { font-size: 12.5px !important; }
+.gridjs-wrapper { border-radius: 10px !important; overflow-x: auto; }
+table.gridjs-table th.gridjs-th:first-child,
+table.gridjs-table td.gridjs-td:first-child {
+  position: sticky;
+  left: 0;
+  box-shadow: 2px 0 5px -2px rgba(20,23,31,0.14);
+}
+table.gridjs-table td.gridjs-td:first-child { background: var(--surface) !important; z-index: 2; }
+table.gridjs-table th.gridjs-th:first-child { z-index: 3; }
+.gridjs-tbody tr:hover td.gridjs-td:first-child { background: #fafafe !important; }
+
+/* Chat tab */
+.chat-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; height: 560px; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.msg { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; }
+.msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.msg.assistant { align-self: flex-start; background: #f2f2f6; color: var(--text); border-bottom-left-radius: 4px; }
+.msg.assistant.loading { color: var(--text-soft); font-style: italic; }
+.msg details { margin-top: 8px; font-size: 11.5px; }
+.msg details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.msg details pre { background: #16161a; color: #d7f7dd; padding: 10px; border-radius: 8px; overflow-x: auto; margin-top: 6px; }
+.chat-input-row { display: flex; gap: 8px; padding: 14px; border-top: 1px solid var(--border); }
+.chat-input-row input { flex: 1; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13.5px; }
+.chat-input-row input:focus { outline: none; border-color: var(--accent); }
+.chat-hint { font-size: 11.5px; color: var(--text-soft); padding: 0 14px 12px; }
+.suggestion-row { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 18px 4px; }
+.suggestion-chip { border: 1px solid var(--border); background: var(--bg); color: var(--text-soft); font-size: 12px; padding: 6px 11px; border-radius: 999px; cursor: pointer; }
+.suggestion-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+footer { margin-top: 26px; font-size: 11.5px; color: #b3b3ba; line-height: 1.6; }
+
+/* Home / selector de país */
+.home-view { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px; }
+.home-inner { max-width: 640px; text-align: center; }
+.home-title { font-size: 28px; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 8px; }
+.home-subtitle { color: var(--text-soft); font-size: 14px; margin-bottom: 32px; }
+.home-cards { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+.home-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 26px 30px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 150px;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+  font-family: inherit;
+}
+.home-card:hover { border-color: var(--accent); box-shadow: 0 6px 18px rgba(20,34,91,0.12); transform: translateY(-2px); }
+.home-flag { font-size: 42px; line-height: 1; }
+.home-country { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.home-hint { margin-top: 28px; font-size: 12px; color: var(--text-soft); }
+
+.country-badge { font-size: 15px; vertical-align: middle; }
+#changeCountryBtn { font-size: 12.5px; }
+
+/* CTA de consolidado global en el home */
+.home-global-btn {
+  margin-top: 22px;
+  border: none;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 13px 26px;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(20,34,91,0.22);
+  transition: transform .12s, box-shadow .12s;
+}
+.home-global-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(20,34,91,0.28); }
+
+/* Vista global consolidada (ejecutiva) */
+.global-view { padding: 22px 26px 48px; max-width: 1280px; margin: 0 auto; }
+.global-kpi-strip .tstat .tvalue { font-size: 24px; }
+.global-country-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.global-country-table th {
+  text-align: left; color: var(--text-soft); font-weight: 700; font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: .02em; padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.global-country-table td { padding: 14px; border-bottom: 1px solid #f0f0f2; vertical-align: middle; }
+.global-country-table tr:last-child td { border-bottom: none; }
+.global-country-name { font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+.global-country-name .flag { font-size: 20px; }
+.global-share-bar { height: 6px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; margin-top: 6px; width: 140px; }
+.global-share-bar > div { height: 100%; background: var(--accent); border-radius: 999px; }
+.global-physical-note { font-size: 12.5px; color: var(--text-soft); margin: 14px 2px 0; line-height: 1.5; }
+.global-subsection-title { font-weight: 700; font-size: 13.5px; margin: 20px 2px 8px; }
+.physical-chart-wrap.tall { height: 420px; }
+
+/* Drill-down por país dentro del consolidado global */
+.country-row { cursor: pointer; }
+.country-row:hover td { background: var(--bg); }
+.drilldown-chevron { display: inline-block; width: 12px; color: var(--text-soft); font-size: 11px; }
+.drilldown-row td { background: var(--bg); padding: 0 !important; border-bottom: 1px solid #f0f0f2; }
+.drilldown-panel { padding: 16px 20px 18px; }
+.drilldown-summary { font-size: 13px; color: var(--text); margin-bottom: 14px; line-height: 1.55; }
+.drilldown-summary:empty { display: none; }
+.loading-inline { color: var(--text-soft); font-style: italic; font-size: 12.5px; }
+.drilldown-dims-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.drilldown-dim-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
+.drilldown-dim-title { font-weight: 700; font-size: 12.5px; margin-bottom: 8px; }
+.drilldown-dim-row2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+.drilldown-dim-row2x2 > div:nth-child(-n+2) { padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+.drilldown-dim-row2x2 .insights-sub { font-size: 10.5px; color: var(--text-soft); text-transform: uppercase; letter-spacing: .02em; margin-bottom: 4px; }
+.drilldown-dim-row2x2 .insight-item { flex-direction: column; align-items: flex-start; gap: 4px; padding: 0; border-bottom: none; }
+.drilldown-dim-row2x2 .insight-name { max-width: 100%; white-space: normal; }
+.insight-caption { color: var(--text-soft); font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="homeView" class="home-view">
+  <div class="home-inner">
+    <div class="home-title">Runrate de Ventas<span class="brand-dot">.</span></div>
+    <div class="home-subtitle">Elige un país para ver su runrate por ciudad, marca, cocina, provider y puntos físicos.</div>
+    <div class="home-cards">
+      <button class="home-card" data-country="MEX"><span class="home-flag">🇲🇽</span><span class="home-country">México</span></button>
+      <button class="home-card" data-country="COL"><span class="home-flag">🇨🇴</span><span class="home-country">Colombia</span></button>
+      <button class="home-card" data-country="PER"><span class="home-flag">🇵🇪</span><span class="home-country">Perú</span></button>
+    </div>
+    <button class="home-global-btn" id="homeGlobalBtn">🌎 Ver consolidado global — México + Colombia + Perú</button>
+    <div class="home-hint">Fuente: fdgy_views.orders_consolidado (Redshift)</div>
+  </div>
+</div>
+<div class="wrap" id="dashboardShell" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <img class="brand-logo" src="data:image/png;base64,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" alt="Foodology" />
+      <h1>Runrate de Ventas<span class="brand-dot">.</span> <span class="country-badge" id="countryBadge"></span></h1>
+      <div class="subtitle" id="subtitle">Cargando fecha del warehouse…</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="changeCountryBtn" title="Cambiar de país">🌎 Cambiar país</button>
+      <button class="btn" id="exportAllBtn" title="Descargar ciudad, marca, cocina y provider en un solo CSV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+        Descargar todo (CSV)
+      </button>
+    </div>
+  </div>
+
+  <div class="banner" id="budgetBanner"></div>
+
+  <div class="controls">
+    <div class="tabs" id="tabs">
+      <button class="tab-btn active" data-dim="city">Ciudad</button>
+      <button class="tab-btn" data-dim="brand">Marca</button>
+      <button class="tab-btn" data-dim="kitchen">Cocina</button>
+      <button class="tab-btn" data-dim="provider">Provider</button>
+      <button class="tab-btn" data-dim="physical">Físicos</button>
+      <button class="tab-btn" data-dim="chat">✨ Preguntar</button>
+    </div>
+    <div class="lookback" id="lookbackWrap">
+      Base de cálculo:
+      <div class="seg" id="lookbackSeg">
+        <button class="seg-btn active" data-weeks="2">2 semanas</button>
+        <button class="seg-btn" data-weeks="3">3 semanas</button>
+      </div>
+    </div>
+    <div class="lookback" id="currencyWrap">
+      Moneda:
+      <div class="seg" id="currencySeg">
+        <button class="seg-btn active" data-currency="LOCAL" id="localCurrencyBtn">MXN</button>
+        <button class="seg-btn" data-currency="USD">USD</button>
+      </div>
+      <span class="currency-check" id="currencyCheck" title="Verifica que todo valor en USD mostrado sea exactamente el valor en MXN dividido entre 20"></span>
+    </div>
+    <label class="auto-refresh" id="autoRefreshWrap" title="Vuelve a consultar el warehouse automáticamente todos los días a las 7:00 a.m. hora Bogotá, cargando ya la información completa del día anterior">
+      <input type="checkbox" id="autoRefreshToggle" checked> Auto-actualizar (diario 7am Bogotá)
+    </label>
+    <span class="last-updated" id="lastUpdated"></span>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="filters-bar" id="filtersBar">
+    <div class="filter-group" id="filterCityWrap">
+      Ciudad:
+      <select id="filterCity"><option value="">Todas las ciudades</option></select>
+    </div>
+    <div class="filter-group" id="filterKitchenWrap">
+      Cocina:
+      <select id="filterKitchen"><option value="">Todas las cocinas</option></select>
+    </div>
+    <div class="filter-group" id="filterProviderWrap">
+      Provider:
+      <select id="filterProvider"><option value="">Todos los providers</option></select>
+    </div>
+    <button class="filters-clear" id="filtersClearBtn" style="display:none">Limpiar filtros</button>
+  </div>
+
+  <div class="totals-strip" id="totalsStrip"></div>
+
+  <div class="insights-card" id="insightsCard">
+    <div class="insights-col">
+      <div class="insights-title">📈 Mayores crecimientos <span class="insights-sub">vs. mes anterior</span></div>
+      <div id="insightsGrowth"></div>
+    </div>
+    <div class="insights-col">
+      <div class="insights-title">📉 Mayores caídas <span class="insights-sub">vs. mes anterior</span></div>
+      <div id="insightsDecline"></div>
+    </div>
+  </div>
+
+  <div class="section-note" id="sectionNote"></div>
+
+  <div id="tableView">
+    <div class="card"><div id="grid-container"><div class="loading">Cargando datos del warehouse…</div></div></div>
+    <div style="margin-top:10px">
+      <button class="btn" id="exportTabBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+        Descargar esta tabla (CSV)
+      </button>
+    </div>
+  </div>
+
+  <div id="chatView" style="display:none">
+    <div class="chat-wrap">
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="suggestion-row" id="suggestionRow"></div>
+      <div class="chat-input-row">
+        <input id="chatInput" type="text" placeholder="Ej: ¿cuáles 3 cocinas tuvieron más quejas la semana pasada?">
+        <button class="btn btn-primary" id="chatSend">Preguntar</button>
+      </div>
+      <div class="chat-hint">Conectado a fdgy_views.orders_consolidado (Redshift, México). Genera SQL automáticamente con IA — revisa la consulta generada (▸ ver SQL) antes de confiar en decisiones importantes.</div>
+    </div>
+  </div>
+
+  <div id="physicalView" style="display:none">
+    <div class="physical-note" id="physicalNote">Puntos físicos con venta en sala/mostrador (FoodologyPOS) además de delivery. RR = runrate del mes actual. Incluye Finalized + Canceled, consistente con el resto del reporte. Ticket promedio (AOV) y calificación se calculan sobre el mes en curso.</div>
+    <div class="filters-bar" id="physicalFiltersBar">
+      <div class="filter-group">
+        Canal:
+        <select id="physicalChannelFilter">
+          <option value="">Todos (Delivery + FoodologyPOS)</option>
+          <option value="delivery">Solo Delivery (Rappi/Uber/DiDi)</option>
+          <option value="pos">Solo FoodologyPOS (mostrador)</option>
+        </select>
+      </div>
+    </div>
+    <div class="card"><div id="physical-grid-container"><div class="loading">Cargando datos del warehouse…</div></div></div>
+    <div class="physical-chart-card">
+      <div class="physical-chart-head">
+        <div style="font-weight:700; font-size:13.5px;">Órdenes diarias por canal (últimos 30 días)</div>
+        <select id="physicalKitchenSelect">
+          <option value="">Cargando…</option>
+        </select>
+      </div>
+      <div class="physical-chart-wrap"><canvas id="physicalChart"></canvas></div>
+    </div>
+    <div class="physical-chart-card">
+      <div class="physical-chart-head">
+        <div style="font-weight:700; font-size:13.5px;">Tendencia semanal de venta por punto de venta (últimas 8 semanas)</div>
+      </div>
+      <div class="physical-chart-wrap"><canvas id="physicalWeeklyChart"></canvas></div>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn" id="exportPhysicalBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+        Descargar esta tabla (CSV)
+      </button>
+    </div>
+  </div>
+
+  <footer id="footerNote">Fuente: fdgy_views.orders_consolidado (Redshift) · incluye órdenes Finalized + Canceled (suma de ambas) salvo donde se indique lo contrario · provider excluye PideDirecto y Justo (sin volumen relevante) · runrate ajustado por día de la semana usando el promedio de GMV de la ventana seleccionada, aplicado a los días de la semana que faltan en el mes actual.</footer>
+</div>
+
+<div id="globalView" class="global-view" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <h1>Runrate Global<span class="brand-dot">.</span> <span class="country-badge">🌎 Consolidado</span></h1>
+      <div class="subtitle" id="globalSubtitle">Cargando fecha del warehouse…</div>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="globalBackBtn" title="Volver al inicio">🏠 Cambiar país</button>
+      <button class="btn" id="globalExportBtn" title="Descargar el desglose consolidado por país en CSV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+        Descargar (CSV)
+      </button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="tabs" id="globalTabs">
+      <button class="tab-btn active" data-gtab="consolidated">Consolidado</button>
+      <button class="tab-btn" data-gtab="physical">Puntos Físicos</button>
+    </div>
+    <div class="lookback" id="globalLookbackWrap" title="El runrate proyecta lo que falta del mes usando el promedio de venta por día de la semana de esta ventana">
+      Base de cálculo:
+      <div class="seg" id="globalLookbackSeg">
+        <button class="seg-btn active" data-weeks="2">2 semanas</button>
+        <button class="seg-btn" data-weeks="3">3 semanas</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="globalConsolidatedView">
+    <div class="totals-strip global-kpi-strip" id="globalKpiStrip"></div>
+
+    <div class="insights-card show" id="globalInsightsCard">
+      <div class="insights-col">
+        <div class="insights-title">📈 País con mayor crecimiento <span class="insights-sub">vs. mes anterior</span></div>
+        <div id="globalInsightGrowth"></div>
+      </div>
+      <div class="insights-col">
+        <div class="insights-title">📉 País con mayor caída <span class="insights-sub">vs. mes anterior</span></div>
+        <div id="globalInsightDecline"></div>
+      </div>
+    </div>
+
+    <div class="card"><div id="global-table-container"><div class="loading">Cargando datos del warehouse…</div></div></div>
+
+    <div class="physical-chart-card">
+      <div class="physical-chart-head">
+        <div style="font-weight:700; font-size:13.5px;">Runrate consolidado por país (USD)</div>
+      </div>
+      <div class="physical-chart-wrap"><canvas id="globalChart"></canvas></div>
+    </div>
+
+    <div class="global-physical-note" id="globalPhysicalNote"></div>
+  </div>
+
+  <div id="globalPhysicalView" style="display:none">
+    <div class="section-note">Los puntos físicos (venta en sala/mostrador vía FoodologyPOS) son la principal fuente de crecimiento de la compañía. Esta vista muestra el desempeño de esas tiendas a nivel país y a nivel tienda, en los 3 países.</div>
+
+    <div class="filters-bar" id="globalPhysicalFiltersBar">
+      <div class="filter-group">
+        Canal:
+        <select id="globalPhysicalChannelFilter">
+          <option value="">Todos (FoodologyPOS + Delivery)</option>
+          <option value="delivery">Solo Delivery (Rappi/Uber/DiDi)</option>
+          <option value="pos">Solo FoodologyPOS (mostrador)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="totals-strip global-kpi-strip" id="globalPhysicalKpiStrip"></div>
+
+    <div class="insights-card show" id="globalPhysicalInsightsCard">
+      <div class="insights-col">
+        <div class="insights-title">📈 Tienda con mayor crecimiento <span class="insights-sub">vs. mes anterior</span></div>
+        <div id="globalPhysicalInsightGrowth"></div>
+      </div>
+      <div class="insights-col">
+        <div class="insights-title">📉 Tienda con mayor caída <span class="insights-sub">vs. mes anterior</span></div>
+        <div id="globalPhysicalInsightDecline"></div>
+      </div>
+    </div>
+
+    <div class="global-subsection-title">FoodologyPOS por país</div>
+    <div class="card"><div id="global-physical-country-container"><div class="loading">Cargando datos del warehouse…</div></div></div>
+
+    <div class="global-subsection-title">FoodologyPOS por tienda</div>
+    <div class="card"><div id="global-physical-store-container"><div class="loading">Cargando datos del warehouse…</div></div></div>
+
+    <div class="physical-chart-card">
+      <div class="physical-chart-head">
+        <div style="font-weight:700; font-size:13.5px;" id="globalPhysicalChartTitle">Runrate por tienda (USD)</div>
+      </div>
+      <div class="physical-chart-wrap tall"><canvas id="globalPhysicalChart"></canvas></div>
+    </div>
+
+    <div class="physical-chart-card">
+      <div class="physical-chart-head">
+        <div style="font-weight:700; font-size:13.5px;">Tendencia semanal de venta por tienda (últimas 8 semanas, USD)</div>
+        <select id="globalPhysicalWeeklyStoreSelect">
+          <option value="">Cargando…</option>
+        </select>
+      </div>
+      <div class="physical-chart-wrap"><canvas id="globalPhysicalWeeklyChart"></canvas></div>
+    </div>
+
+    <div style="margin-top:10px">
+      <button class="btn" id="globalPhysicalExportBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+        Descargar (CSV)
+      </button>
+    </div>
+  </div>
+
+  <footer>Cifras consolidadas en USD usando tipos de cambio de referencia fijos por país (no de mercado en tiempo real) · incluye órdenes Finalized + Canceled · runrate ajustado por día de la semana igual que en las vistas por país · fuente: fdgy_views.orders_consolidado (Redshift).</footer>
+</div>
+
+<script>
+// Antes: WAREHOUSE_TOOL apuntaba al MCP de Redshift dentro de Cowork.
+// Ahora callSQL() y askClaude() (ver más abajo) le pegan al backend propio.
+
+const DIMS = {
+  city:     { label: "Ciudad", column: "city", hasBudget: true },
+  brand:    { label: "Marca", column: "brand", hasBudget: false },
+  kitchen:  { label: "Cocina", column: "kitchen", hasBudget: false },
+  provider: { label: "Provider", column: "provider_new_name", hasBudget: false },
+};
+const DIM_ORDER = ["city", "brand", "kitchen", "provider"];
+
+// Países disponibles en el home. fxToUsd es un tipo de cambio de referencia
+// fijo (aproximado, no de mercado en tiempo real) usado únicamente para el
+// toggle de moneda LOCAL/USD. hasBudget indica si BUDGET_REF (más abajo, sólo
+// tiene presupuestos de ciudades de México) aplica a ese país.
+const COUNTRIES = {
+  MEX: { label: "México", flag: "🇲🇽", currency: "MXN", symbol: "$", fxToUsd: 20, hasBudget: true },
+  COL: { label: "Colombia", flag: "🇨🇴", currency: "COP", symbol: "$", fxToUsd: 4000, hasBudget: false },
+  PER: { label: "Perú", flag: "🇵🇪", currency: "PEN", symbol: "S/", fxToUsd: 3.75, hasBudget: false },
+};
+
+// Presupuesto de referencia — bloque fijo, actualizar manualmente cada mes.
+const BUDGET_REF = {
+  mes: "2026-07",
+  values: {
+    "Ciudad de México": 29890801,
+    "Monterrey": 10734050,
+    "Guadalajara": 8677698,
+    "Puebla": 2667171,
+    "Merida": 2602212,
+    "Zona Centro": 1671106,
+  },
+  total: 56243038,
+};
+
+const MESES_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+
+function loadStoredFilters() {
+  try {
+    const raw = localStorage.getItem("rr_filters");
+    if (!raw) return { city: "", kitchen: "", provider: "" };
+    const parsed = JSON.parse(raw);
+    return { city: parsed.city || "", kitchen: parsed.kitchen || "", provider: parsed.provider || "" };
+  } catch (e) { return { city: "", kitchen: "", provider: "" }; }
+}
+
+const state = {
+  country: localStorage.getItem("rr_country") || "",
+  hoy: null,
+  hoyDateObj: null,
+  mesActualInicio: null,
+  mesActualFin: null,
+  mesAnteriorInicio: null,
+  mismoAnioInicio: null,
+  conteoDow: {},
+  lookbackWeeks: parseInt(localStorage.getItem("rr_lookbackWeeks") || "2", 10),
+  activeDim: localStorage.getItem("rr_activeDim") || "city",
+  // Valores válidos: "LOCAL" (moneda del país activo) o "USD". Cualquier valor
+  // viejo guardado (ej. "MXN" de versiones anteriores) se trata como "LOCAL".
+  currency: localStorage.getItem("rr_currency") === "USD" ? "USD" : "LOCAL",
+  mtd: {},
+  dow: {},
+  lastRows: {},
+  grid: null,
+  chatHistory: [],
+  renderToken: 0,
+  autoRefresh: localStorage.getItem("rr_autoRefresh") !== "0",
+  dailyRefreshTimer: null,
+  lastUpdated: null,
+  filters: loadStoredFilters(),
+  filterOptions: { city: [], kitchen: [], provider: [] },
+  physical: { kitchensList: null, mtdMap: null, dowMap: {}, daily: null, weekly: null, rows: null, chart: null, weeklyChart: null, selectedKitchen: "", channelFilter: localStorage.getItem("rr_physicalChannel") || "" },
+  // Vista ejecutiva consolidada (México + Colombia + Perú), siempre en USD.
+  globalTab: localStorage.getItem("rr_globalTab") || "consolidated",
+  global: {
+    mtdMap: null, dowMap: {}, rows: null, physicalCounts: null, chart: null,
+    // Detalle de puntos físicos dentro del consolidado global (país + tienda).
+    physical: {
+      kitchensByCountry: null, mtdMap: null, dowMap: {}, storeRows: null, countryRows: null, chart: null,
+      weekly: null, weeklyChart: null, selectedStore: "",
+      channelFilter: localStorage.getItem("rr_globalPhysicalChannel") || "",
+    },
+    // Doble clic por país dentro de la pestaña Consolidado: panel expandible
+    // con insights de ciudad/marca/cocina/provider para ese país sin salir de
+    // la vista global. "open" recuerda qué países están desplegados (se puede
+    // tener varios abiertos a la vez); "data" cachea mtd/dow por país+dimensión.
+    drilldown: { open: {}, data: {} },
+  },
+};
+
+// Tipo de cambio de referencia (fijo, aproximado) por país — ver COUNTRIES.
+function usdRate() { return (COUNTRIES[state.country] && COUNTRIES[state.country].fxToUsd) || 1; }
+const PROVIDER_EXCLUDE = ["PideDirecto", "Justo"]; // sin volumen relevante / descontinuados
+const BOGOTA_REFRESH_HOUR = 7; // hora local Bogotá (Colombia no observa horario de verano)
+// Umbral de "punto físico": una cocina cuenta como punto físico (mostrador/
+// sala) en un país si tuvo órdenes FoodologyPOS en al menos este número de
+// días distintos de los últimos 30 — validado contra datos reales (corte
+// limpio entre puntos genuinos ~28-30 días y ruido ≤10 días).
+const PHYSICAL_MIN_POS_DAYS = 20;
+
+function pad(n) { return n < 10 ? "0"+n : ""+n; }
+function fmtDate(d) { return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
+// Devuelve el lunes de la semana (lunes-domingo) que contiene la fecha dada.
+// getDay(): 0=domingo, 1=lunes, ..., 6=sábado.
+function mondayOf(d) {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+// Etiqueta corta "DD/MM" para el lunes de una semana (order_week ya viene del
+// warehouse como la fecha del lunes de esa semana).
+function weekLabel(mondayStr) {
+  if (!mondayStr) return "";
+  const parts = mondayStr.split("-");
+  return `${parts[2]}/${parts[1]}`;
+}
+// Rango completo "DD/MM–DD/MM" (lunes a domingo) para tooltips, a partir de la
+// fecha del lunes.
+function weekRangeLabel(mondayStr) {
+  if (!mondayStr) return "";
+  const monday = new Date(mondayStr + "T00:00:00");
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
+  return `${weekLabel(mondayStr)}–${weekLabel(fmtDate(sunday))}`;
+}
+function escapeSql(s) { return String(s).replace(/'/g, "''"); }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+function convertCurrency(n) {
+  if (n === null || n === undefined) return n;
+  return state.currency === "USD" ? n / usdRate() : n;
+}
+function currencySymbol() {
+  if (state.currency === "USD") return "US$";
+  return (COUNTRIES[state.country] && COUNTRIES[state.country].symbol) || "$";
+}
+function fmtNum(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return Math.round(n).toLocaleString("es-MX");
+}
+// Abrevia montos grandes en millones (ej. 27,817,450 -> "27.8M") para que las
+// tablas no se llenen de números largos. Por debajo de 1,000,000 se muestra el
+// número completo con separadores de miles (ya es corto).
+function abbreviateAmount(nonNegativeValue) {
+  if (nonNegativeValue >= 1000000) {
+    return (nonNegativeValue / 1000000).toFixed(1) + "M";
+  }
+  return fmtNum(nonNegativeValue);
+}
+function fmtMoney(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  const converted = convertCurrency(n);
+  const prefix = currencySymbol();
+  const sign = converted < 0 ? "-" : "";
+  return sign + prefix + abbreviateAmount(Math.abs(converted));
+}
+function fmtPctAbs(pct, abs) {
+  if (pct === null || pct === undefined || !isFinite(pct)) return "N/A";
+  const sign = pct >= 0 ? "+" : "";
+  const cls = pct > 0 ? "pos" : (pct < 0 ? "neg" : "neutral");
+  const signAbs = abs >= 0 ? "+" : "-";
+  const prefix = currencySymbol();
+  const absDisplay = abbreviateAmount(Math.abs(convertCurrency(abs)));
+  return `<span class="growth-pill ${cls}">${sign}${pct.toFixed(1)}% <span class="growth-abs">(${signAbs}${prefix}${absDisplay})</span></span>`;
+}
+
+// Verificación en vivo: recorre las filas ya calculadas de la pestaña activa y
+// confirma que convertCurrency(valor_mxn) — la MISMA función que usan fmtMoney,
+// las celdas de la tabla, la franja de totales y el CSV — sea exactamente
+// valor_mxn / 20 cuando la moneda activa es USD. Se compara el número puro
+// (no el texto abreviado con "M"), así que el chequeo no se ve afectado por
+// cómo se formatee visualmente el monto.
+function verifyUsdConsistency(dim) {
+  const rows = state.lastRows[dim];
+  const badge = document.getElementById("currencyCheck");
+  if (!badge) return true;
+  if (!rows || !rows.length) { badge.textContent = ""; return true; }
+  const savedCurrency = state.currency;
+  let ok = true;
+  const fields = ["runrate", "mtd", "mesAnt", "mismoAnt", "budget"];
+  state.currency = "USD";
+  for (const r of rows) {
+    for (const f of fields) {
+      const raw = r[f];
+      if (raw === null || raw === undefined) continue;
+      const expectedUsd = raw / usdRate();
+      const actualUsd = convertCurrency(raw);
+      if (Math.abs(expectedUsd - actualUsd) > 0.0001) {
+        ok = false;
+        console.error("Inconsistencia USD detectada en", dim, r.name, f, { local: raw, esperado_usd: expectedUsd, obtenido_usd: actualUsd });
+      }
+    }
+  }
+  state.currency = savedCurrency;
+  const cur = (COUNTRIES[state.country] && COUNTRIES[state.country].currency) || "LOCAL";
+  badge.textContent = ok ? `✓ USD = ${cur} ÷ ${usdRate()}` : "⚠ revisar conversión USD";
+  badge.className = "currency-check " + (ok ? "ok" : "bad");
+  return ok;
+}
+
+async function callSQL(sql) {
+  const res = await fetch("/api/query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error("Query error: " + (data.error || res.statusText));
+  return data;
+}
+
+async function askClaude(prompt) {
+  const res = await fetch("/api/ask-claude", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function rowsToArrays(data) {
+  return data.rows.map(row => {
+    const o = {};
+    data.columns.forEach((c,i) => o[c] = row[i]);
+    return o;
+  });
+}
+
+// Cláusulas de los filtros de usuario (ciudad/cocina/provider). Se omite el
+// filtro cuya dimensión coincide con la pestaña activa (no tiene sentido
+// filtrar la tabla de Ciudad por ciudad, por ejemplo).
+function activeFilterClauses(dim) {
+  let clauses = "";
+  if (state.filters.city && dim !== "city") clauses += ` AND city = '${escapeSql(state.filters.city)}'`;
+  if (state.filters.kitchen && dim !== "kitchen") clauses += ` AND kitchen = '${escapeSql(state.filters.kitchen)}'`;
+  if (state.filters.provider && dim !== "provider") clauses += ` AND provider_new_name = '${escapeSql(state.filters.provider)}'`;
+  return clauses;
+}
+
+function dimExtraFilter(dim) {
+  let clauses = "";
+  if (dim === "provider") {
+    const excluded = PROVIDER_EXCLUDE.map(p => `'${p}'`).join(", ");
+    clauses += ` AND ${DIMS[dim].column} NOT IN (${excluded})`;
+  }
+  clauses += activeFilterClauses(dim);
+  return clauses;
+}
+
+function hasActiveFilters() {
+  return !!(state.filters.city || state.filters.kitchen || state.filters.provider);
+}
+
+async function fetchMTD(dim) {
+  const col = DIMS[dim].column;
+  const sql = `
+SELECT ${col} AS dim_value,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN gmv ELSE 0 END) AS gmv_mtd,
+ SUM(CASE WHEN order_month = '${state.mesAnteriorInicio}' THEN gmv ELSE 0 END) AS gmv_mes_anterior,
+ SUM(CASE WHEN order_month = '${state.mismoAnioInicio}' THEN gmv ELSE 0 END) AS gmv_mismo_anio_anterior
+FROM fdgy_views.orders_consolidado
+WHERE country = '${state.country}' AND order_state IN ('Finalized', 'Canceled')${dimExtraFilter(dim)}
+ AND ((order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}')
+      OR order_month = '${state.mesAnteriorInicio}'
+      OR order_month = '${state.mismoAnioInicio}')
+GROUP BY ${col}`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const name = r.dim_value === null ? "(sin dato)" : r.dim_value;
+    map[name] = {
+      mtd: Number(r.gmv_mtd) || 0,
+      mesAnt: Number(r.gmv_mes_anterior) || 0,
+      mismoAnt: Number(r.gmv_mismo_anio_anterior) || 0,
+    };
+  });
+  state.mtd[dim] = map;
+}
+
+async function fetchDow(dim, weeks) {
+  const days = weeks * 7;
+  const lookbackStart = new Date(state.hoyDateObj);
+  lookbackStart.setDate(lookbackStart.getDate() - days);
+  const col = DIMS[dim].column;
+  const sql = `
+SELECT ${col} AS dim_value, EXTRACT(dow FROM order_day) AS dow, SUM(gmv)/COUNT(DISTINCT order_day) AS avg_gmv_dow
+FROM fdgy_views.orders_consolidado
+WHERE order_day >= '${fmtDate(lookbackStart)}' AND order_day < '${state.hoy}'
+ AND country = '${state.country}' AND order_state IN ('Finalized', 'Canceled')${dimExtraFilter(dim)}
+GROUP BY ${col}, EXTRACT(dow FROM order_day)`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const name = r.dim_value === null ? "(sin dato)" : r.dim_value;
+    if (!map[name]) map[name] = {};
+    map[name][Math.round(Number(r.dow))] = Number(r.avg_gmv_dow) || 0;
+  });
+  if (!state.dow[dim]) state.dow[dim] = {};
+  state.dow[dim][weeks] = map;
+}
+
+async function ensureDimData(dim, weeks) {
+  if (!state.mtd[dim]) await fetchMTD(dim);
+  if (!state.dow[dim] || !state.dow[dim][weeks]) await fetchDow(dim, weeks);
+}
+
+// Núcleo del cálculo de runrate (mtd + proyección por día de la semana),
+// reutilizado tanto por las 4 pestañas de dimensión como por la pestaña de
+// Físicos, que aplica el mismo método sobre un subconjunto fijo de cocinas.
+function computeRunrateBase(mtdMap, dowMap) {
+  const rows = [];
+  for (const name in mtdMap) {
+    const { mtd, mesAnt, mismoAnt } = mtdMap[name];
+    const dowd = dowMap[name] || {};
+    let proy = 0;
+    for (const dowStr in state.conteoDow) {
+      const dowNum = parseInt(dowStr, 10);
+      proy += (dowd[dowNum] || 0) * state.conteoDow[dowStr];
+    }
+    const runrate = mtd + proy;
+    const crecMesAntAbs = runrate - mesAnt;
+    const crecMesAntPct = mesAnt ? (crecMesAntAbs / mesAnt * 100) : null;
+    const crecMismoAntAbs = runrate - mismoAnt;
+    const crecMismoAntPct = mismoAnt ? (crecMismoAntAbs / mismoAnt * 100) : null;
+    rows.push({ name, mtd, runrate, mesAnt, mismoAnt, crecMesAntAbs, crecMesAntPct, crecMismoAntAbs, crecMismoAntPct });
+  }
+  return rows;
+}
+
+function computeRows(dim, weeks) {
+  const mtdMap = state.mtd[dim] || {};
+  const dowMap = (state.dow[dim] && state.dow[dim][weeks]) || {};
+  const rows = computeRunrateBase(mtdMap, dowMap);
+  rows.forEach(r => {
+    let budget = null, cumpl = null;
+    if (DIMS[dim].hasBudget && state.country === "MEX") {
+      const budgetOk = BUDGET_REF.mes === state.currentYYYYMM;
+      if (budgetOk) {
+        budget = BUDGET_REF.values[r.name] !== undefined ? BUDGET_REF.values[r.name] : null;
+        cumpl = budget ? (r.runrate / budget * 100) : null;
+      }
+    }
+    r.budget = budget; r.cumpl = cumpl;
+  });
+  rows.sort((a,b) => b.runrate - a.runrate);
+  return rows;
+}
+
+function renderBanner() {
+  const banner = document.getElementById("budgetBanner");
+  if (state.country !== "MEX") { banner.className = "banner"; return; }
+  const budgetOk = BUDGET_REF.mes === state.currentYYYYMM;
+  if (!budgetOk) {
+    banner.className = "banner show";
+    banner.innerHTML = `⚠️ Presupuesto de ${state.mesActualNombre} aún no actualizado — el último presupuesto guardado corresponde a ${BUDGET_REF.mes}. Actualízalo editando el bloque BUDGET_REF de este artefacto con el presupuesto por ciudad del mes actual.`;
+  } else {
+    banner.className = "banner";
+  }
+}
+
+function renderTotals(dim, rows) {
+  const strip = document.getElementById("totalsStrip");
+  const totalRunrate = rows.reduce((s, r) => s + r.runrate, 0);
+  const totalMesAnt = rows.reduce((s, r) => s + r.mesAnt, 0);
+  const totalMismoAnt = rows.reduce((s, r) => s + r.mismoAnt, 0);
+  const crecMesAntAbs = totalRunrate - totalMesAnt;
+  const crecMesAntPct = totalMesAnt ? (crecMesAntAbs / totalMesAnt * 100) : null;
+  const crecMismoAntAbs = totalRunrate - totalMismoAnt;
+  const crecMismoAntPct = totalMismoAnt ? (crecMismoAntAbs / totalMismoAnt * 100) : null;
+
+  let budgetStat = "";
+  if (DIMS[dim].hasBudget && state.country === "MEX") {
+    const budgetOk = BUDGET_REF.mes === state.currentYYYYMM;
+    if (budgetOk) {
+      const cumpl = totalRunrate / BUDGET_REF.total * 100;
+      budgetStat = `<div class="tstat"><div class="tlabel">Cumplimiento vs presupuesto</div><div class="tvalue">${cumpl.toFixed(1)}%</div><div class="tsub">Presupuesto total: ${fmtMoney(BUDGET_REF.total)}</div></div>`;
+    } else {
+      budgetStat = `<div class="tstat"><div class="tlabel">Cumplimiento vs presupuesto</div><div class="tvalue">N/D</div><div class="tsub">Presupuesto no actualizado</div></div>`;
+    }
+  }
+
+  strip.innerHTML = `
+    <div class="tstat">
+      <div class="tlabel">Total runrate ${state.mesActualNombre}</div>
+      <div class="tvalue">${fmtMoney(totalRunrate)}</div>
+      <div class="tsub">${rows.length} ${DIMS[dim].label.toLowerCase()}${rows.length === 1 ? "" : "s"}</div>
+    </div>
+    <div class="tstat">
+      <div class="tlabel">Vs mes anterior</div>
+      <div class="tvalue">${fmtPctAbs(crecMesAntPct, crecMesAntAbs)}</div>
+      <div class="tsub">${fmtMoney(totalMesAnt)}</div>
+    </div>
+    <div class="tstat">
+      <div class="tlabel">Vs mismo mes año anterior</div>
+      <div class="tvalue">${fmtPctAbs(crecMismoAntPct, crecMismoAntAbs)}</div>
+      <div class="tsub">${fmtMoney(totalMismoAnt)}</div>
+    </div>
+    ${budgetStat}
+  `;
+}
+
+// Umbral mínimo (en MXN, sin importar la moneda de visualización) para que una
+// fila entre a los insights de crecimiento/caída — evita que cocinas/marcas
+// con montos insignificantes dominen el ranking por variaciones % ruidosas.
+const INSIGHTS_MIN_BASE = 20000;
+// Mismo criterio que INSIGHTS_MIN_BASE pero en USD, para el drill-down por
+// país del consolidado global (donde las 3 monedas conviven en la misma
+// vista y no se puede usar un umbral fijo en moneda local).
+const DIM_INSIGHTS_MIN_USD = 500;
+
+function renderInsights(dim, rows) {
+  const card = document.getElementById("insightsCard");
+  const growthBox = document.getElementById("insightsGrowth");
+  const declineBox = document.getElementById("insightsDecline");
+  const eligible = rows.filter(r => r.mesAnt >= INSIGHTS_MIN_BASE && r.crecMesAntPct !== null && isFinite(r.crecMesAntPct));
+
+  if (eligible.length === 0) {
+    card.classList.add("show");
+    growthBox.innerHTML = '<div class="insight-empty">Sin datos comparables suficientes.</div>';
+    declineBox.innerHTML = '<div class="insight-empty">Sin datos comparables suficientes.</div>';
+    return;
+  }
+  card.classList.add("show");
+
+  const itemHtml = (r) => {
+    const prefix = currencySymbol();
+    const absDisplay = abbreviateAmount(Math.abs(convertCurrency(r.crecMesAntAbs)));
+    const sign = r.crecMesAntPct >= 0 ? "+" : "";
+    const cls = r.crecMesAntPct > 0 ? "pos" : (r.crecMesAntPct < 0 ? "neg" : "neutral");
+    return `<div class="insight-item"><span class="insight-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span><span class="growth-pill ${cls}">${sign}${r.crecMesAntPct.toFixed(1)}% <span class="growth-abs">(${r.crecMesAntAbs >= 0 ? "+" : "-"}${prefix}${absDisplay})</span></span></div>`;
+  };
+
+  const topGrowth = [...eligible].sort((a,b) => b.crecMesAntPct - a.crecMesAntPct).slice(0, 3).filter(r => r.crecMesAntPct > 0);
+  const topDecline = [...eligible].sort((a,b) => a.crecMesAntPct - b.crecMesAntPct).slice(0, 3).filter(r => r.crecMesAntPct < 0);
+
+  growthBox.innerHTML = topGrowth.length
+    ? topGrowth.map(itemHtml).join("")
+    : '<div class="insight-empty">Ninguna registra crecimiento vs. el año anterior.</div>';
+  declineBox.innerHTML = topDecline.length
+    ? topDecline.map(itemHtml).join("")
+    : '<div class="insight-empty">Ninguna registra caída vs. el año anterior.</div>';
+}
+
+function dimColumnsSpec(dim) {
+  const cols = [
+    { header: DIMS[dim].label, key: "name" },
+    { header: `RR ${state.mesActualNombre}`, key: "runrate", money: true },
+    { header: "GMV Last Month", key: "mesAnt", money: true },
+    { header: "GMV Last Year", key: "mismoAnt", money: true },
+    { header: "Crec vs LM", key: "crecMesAnt", growth: true },
+    { header: "Crec vs LY", key: "crecMismoAnt", growth: true },
+  ];
+  if (DIMS[dim].hasBudget && state.country === "MEX") {
+    cols.push({ header: "PPTO", key: "budget", money: true, allowNull: true });
+    cols.push({ header: "Cump. vs PPTO", key: "cumpl", pctPlain: true, allowNull: true });
+  }
+  return cols;
+}
+
+function renderTable(dim, weeks) {
+  const rows = computeRows(dim, weeks);
+  state.lastRows[dim] = rows;
+  renderBanner();
+  renderTotals(dim, rows);
+  renderInsights(dim, rows);
+  verifyUsdConsistency(dim);
+
+  const pctCompare = (a, b) => {
+    const av = (a && a.pct !== null && a.pct !== undefined) ? a.pct : -Infinity;
+    const bv = (b && b.pct !== null && b.pct !== undefined) ? b.pct : -Infinity;
+    return av - bv;
+  };
+
+  const spec = dimColumnsSpec(dim);
+  const columns = spec.map(c => {
+    if (c.growth) return { name: c.header, sort: { compare: pctCompare }, formatter: (cell) => gridjs.html(fmtPctAbs(cell.pct, cell.abs)) };
+    if (c.money) return { name: c.header, sort: true, formatter: (cell) => cell === null ? "N/D" : fmtMoney(cell) };
+    if (c.pctPlain) return { name: c.header, sort: true, formatter: (cell) => cell === null ? "N/D" : cell.toFixed(1) + "%" };
+    return { name: c.header, sort: true };
+  });
+
+  const gjsRows = rows.map(r => spec.map(c => {
+    if (c.growth) return { pct: r[c.key + "Pct"], abs: r[c.key + "Abs"] };
+    return r[c.key];
+  }));
+
+  document.getElementById("grid-container").innerHTML = "";
+  state.grid = new gridjs.Grid({
+    columns: columns,
+    data: gjsRows,
+    sort: true,
+    search: true,
+    pagination: { limit: 15 },
+    className: { table: "gridjs-table" },
+  }).render(document.getElementById("grid-container"));
+
+  const filterParts = [];
+  if (state.filters.city && dim !== "city") filterParts.push(`ciudad = ${state.filters.city}`);
+  if (state.filters.kitchen && dim !== "kitchen") filterParts.push(`cocina = ${state.filters.kitchen}`);
+  if (state.filters.provider && dim !== "provider") filterParts.push(`provider = ${state.filters.provider}`);
+  const filterNote = filterParts.length ? ` <strong>Filtrado por ${filterParts.join(", ")}.</strong>` : "";
+
+  document.getElementById("sectionNote").innerHTML = ((DIMS[dim].hasBudget && state.country === "MEX")
+    ? "Tabla ordenada por Venta Runrate del mes actual descendente. El presupuesto es un valor de referencia fijo (se actualiza manualmente una vez al mes)."
+    : "Tabla ordenada por Venta Runrate del mes actual descendente. Usa el buscador para encontrar una " + DIMS[dim].label.toLowerCase() + " específica. Haz clic en cualquier encabezado para ordenar de mayor a menor o menor a mayor.") + filterNote;
+}
+
+// ---------- CSV export ----------
+function csvEscape(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function dimRowsToCSVLines(dim, rows) {
+  const spec = dimColumnsSpec(dim);
+  const lines = [spec.map(c => csvEscape(c.header)).join(",")];
+  rows.forEach(r => {
+    const line = spec.map(c => {
+      if (c.growth) {
+        const pct = r[c.key + "Pct"], abs = r[c.key + "Abs"];
+        if (pct === null || pct === undefined || !isFinite(pct)) return csvEscape("N/A");
+        const prefix = currencySymbol();
+        return csvEscape(`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% (${abs >= 0 ? "+" : "-"}${prefix}${fmtNum(Math.abs(convertCurrency(abs)))})`);
+      }
+      if (c.money) return csvEscape(r[c.key] === null ? "N/D" : Math.round(convertCurrency(r[c.key])));
+      if (c.pctPlain) return csvEscape(r[c.key] === null ? "N/D" : r[c.key].toFixed(1) + "%");
+      return csvEscape(r[c.key]);
+    });
+    lines.push(line.join(","));
+  });
+  return lines;
+}
+
+function downloadCSV(filename, content) {
+  const blob = new Blob(["﻿" + content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportCurrentTab() {
+  const dim = state.activeDim;
+  if (!DIMS[dim] || !state.lastRows[dim]) return;
+  const lines = [`Moneda: ${state.currency}`, ""].concat(dimRowsToCSVLines(dim, state.lastRows[dim]));
+  downloadCSV(`runrate_${state.country}_${dim}_${state.currency}_${state.hoy}.csv`, lines.join("\r\n"));
+}
+
+async function exportAll() {
+  const btn = document.getElementById("exportAllBtn");
+  const original = btn.innerHTML;
+  btn.innerHTML = "Generando…";
+  btn.disabled = true;
+  try {
+    for (const dim of DIM_ORDER) {
+      await ensureDimData(dim, state.lookbackWeeks);
+    }
+    let allLines = [`Moneda: ${state.currency}`, ""];
+    DIM_ORDER.forEach(dim => {
+      const rows = computeRows(dim, state.lookbackWeeks);
+      allLines.push(`=== ${DIMS[dim].label.toUpperCase()} ===`);
+      allLines = allLines.concat(dimRowsToCSVLines(dim, rows));
+      allLines.push("");
+    });
+    downloadCSV(`runrate_${state.country}_completo_${state.currency}_${state.hoy}.csv`, allLines.join("\r\n"));
+  } finally {
+    btn.innerHTML = original;
+    btn.disabled = false;
+  }
+}
+
+// ---------- Chat ----------
+function asText(r) {
+  if (typeof r === "string") return r;
+  if (r && typeof r.text === "string") return r.text;
+  if (r && typeof r.content === "string") return r.content;
+  if (r && Array.isArray(r.content) && r.content[0] && r.content[0].text) return r.content[0].text;
+  try { return JSON.stringify(r); } catch (e) { return String(r); }
+}
+
+function extractSQL(text) {
+  let t = asText(text).trim();
+  const fenceMatch = t.match(/```(?:sql)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) t = fenceMatch[1].trim();
+  t = t.replace(/;\s*$/, "");
+  return t;
+}
+
+function schemaContext() {
+  return `Tabla disponible: fdgy_views.orders_consolidado (una fila por orden, Redshift).
+Columnas relevantes y su significado:
+- country: país ISO3 (usar '${state.country}' para ${COUNTRIES[state.country] ? COUNTRIES[state.country].label : state.country})
+- city, kitchen, brand, provider_new_name: dimensiones de negocio (ciudad, cocina/dark kitchen, marca, plataforma de delivery)
+- order_day (date), order_week (date), order_month (date, primer día del mes), order_hour (0-23), time_slot
+- order_state: 'Finalized' o 'Canceled' (nota: una sola L, no 'Cancelled')
+- gmv (double, MXN): venta bruta. gross_sales, discount también disponibles.
+- ratings (1-5), is_complaint (0/1), has_complaint (bool), complaint_reason
+- customer_type_brand: 'NEW' o 'RETAINED'
+- minutes_cooking_time, payment_method
+
+Contexto de fechas (hoy según el warehouse es ${state.hoy}):
+- Mes actual: del ${state.mesActualInicio} al ${state.mesActualFin}
+- Mes anterior completo: order_month = '${state.mesAnteriorInicio}'
+- Mismo mes año anterior completo: order_month = '${state.mismoAnioInicio}'
+
+Reglas:
+1. Siempre filtra country = '${state.country}' salvo que se pida explícitamente otro país.
+2. Para preguntas de "ventas" o "GMV" sin más detalle, suma order_state IN ('Finalized','Canceled'), salvo que el usuario pida explícitamente solo finalizadas o solo canceladas.
+3. Usa order_day para rangos de fechas relativos ("la semana pasada", "ayer", "últimos 7 días") y order_month para meses calendario completos.
+4. Responde ÚNICAMENTE con una sentencia SQL SELECT (o CTE-SELECT) válida para Redshift. Sin explicación, sin markdown, sin punto y coma final.`;
+}
+
+function appendChatMessage(role, text, isLoading) {
+  const container = document.getElementById("chatMessages");
+  const div = document.createElement("div");
+  div.className = "msg " + role + (isLoading ? " loading" : "");
+  div.textContent = text;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+function renderAssistantFinal(div, answerText, sql) {
+  div.classList.remove("loading");
+  div.textContent = "";
+  const p = document.createElement("div");
+  p.textContent = answerText;
+  div.appendChild(p);
+  if (sql) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "▸ ver SQL generado";
+    const pre = document.createElement("pre");
+    pre.textContent = sql;
+    details.appendChild(summary);
+    details.appendChild(pre);
+    div.appendChild(details);
+  }
+}
+
+async function askChatbot(question) {
+  appendChatMessage("user", question);
+  const loadingDiv = appendChatMessage("assistant", "Generando consulta SQL…", true);
+
+  let sql;
+  try {
+    const sqlResponse = await askClaude(schemaContext() + "\n\nPregunta del usuario: " + question + "\n\nSQL:");
+    sql = extractSQL(sqlResponse);
+  } catch (e) {
+    renderAssistantFinal(loadingDiv, "No pude generar la consulta SQL: " + e.message);
+    return;
+  }
+
+  loadingDiv.textContent = "Consultando el warehouse…";
+  let data;
+  try {
+    data = await callSQL(sql);
+  } catch (e) {
+    renderAssistantFinal(loadingDiv, "La consulta generada falló al ejecutarse. Intenta reformular la pregunta con más detalle (ciudad, marca, rango de fechas, etc).", sql);
+    return;
+  }
+
+  const rows = rowsToArrays(data);
+  loadingDiv.textContent = "Redactando respuesta…";
+  let answer;
+  try {
+    const answerResponse = await askClaude(
+      `Pregunta original del usuario: "${question}"\n\nResultado de la consulta SQL en JSON:\n${JSON.stringify(rows).slice(0, 6000)}\n\nResponde en español, de forma conversacional, clara y concisa (máximo 4-5 líneas), con los números formateados con separadores de miles y signo de pesos ($) cuando sean montos de GMV. Si el resultado está vacío, dilo explícitamente.`
+    );
+    answer = asText(answerResponse);
+  } catch (e) {
+    answer = "Consulta ejecutada correctamente pero no pude redactar el resumen (" + e.message + "). Resultado crudo: " + JSON.stringify(rows).slice(0, 500);
+  }
+  renderAssistantFinal(loadingDiv, answer, sql);
+}
+
+const CHAT_SUGGESTIONS = [
+  "¿Cuál fue la marca con más quejas este mes en Ciudad de México?",
+  "¿Cómo va Rappi vs Uber Eats vs DiDi este mes?",
+  "Top 5 cocinas por AOV (ticket promedio) del mes actual",
+  "¿Qué % de las órdenes de este mes fueron canceladas?",
+];
+
+function renderSuggestions() {
+  const row = document.getElementById("suggestionRow");
+  row.innerHTML = "";
+  CHAT_SUGGESTIONS.forEach(s => {
+    const chip = document.createElement("button");
+    chip.className = "suggestion-chip";
+    chip.textContent = s;
+    chip.onclick = () => { document.getElementById("chatInput").value = s; sendChat(); };
+    row.appendChild(chip);
+  });
+}
+
+function sendChat() {
+  const input = document.getElementById("chatInput");
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = "";
+  askChatbot(q);
+}
+
+// ---------- Filtros (ciudad/cocina/provider) ----------
+function populateFilterSelect(id, values, placeholder, selected) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = `<option value="">${placeholder}</option>` + values.map(v => `<option value="${escapeHtml(v)}"${v === selected ? " selected" : ""}>${escapeHtml(v)}</option>`).join("");
+}
+
+async function loadFilterOptions() {
+  const citySql = `SELECT DISTINCT city FROM fdgy_views.orders_consolidado WHERE country = '${state.country}' AND city IS NOT NULL ORDER BY city`;
+  const kitchenSql = `SELECT DISTINCT kitchen FROM fdgy_views.orders_consolidado WHERE country = '${state.country}' AND kitchen IS NOT NULL ORDER BY kitchen`;
+  const providerExcluded = PROVIDER_EXCLUDE.map(p => `'${p}'`).join(", ");
+  const providerSql = `SELECT DISTINCT provider_new_name FROM fdgy_views.orders_consolidado WHERE country = '${state.country}' AND provider_new_name IS NOT NULL AND provider_new_name NOT IN (${providerExcluded}) ORDER BY provider_new_name`;
+  const [cityData, kitchenData, providerData] = await Promise.all([callSQL(citySql), callSQL(kitchenSql), callSQL(providerSql)]);
+  state.filterOptions.city = rowsToArrays(cityData).map(r => r.city).filter(Boolean);
+  state.filterOptions.kitchen = rowsToArrays(kitchenData).map(r => r.kitchen).filter(Boolean);
+  state.filterOptions.provider = rowsToArrays(providerData).map(r => r.provider_new_name).filter(Boolean);
+  populateFilterSelect("filterCity", state.filterOptions.city, "Todas las ciudades", state.filters.city);
+  populateFilterSelect("filterKitchen", state.filterOptions.kitchen, "Todas las cocinas", state.filters.kitchen);
+  populateFilterSelect("filterProvider", state.filterOptions.provider, "Todos los providers", state.filters.provider);
+  updateFiltersClearVisibility();
+}
+
+function updateFiltersClearVisibility() {
+  document.getElementById("filtersClearBtn").style.display = hasActiveFilters() ? "inline-block" : "none";
+}
+
+// Oculta el filtro cuya dimensión coincide con la pestaña activa (no aplica
+// filtrar la tabla de Ciudad por ciudad, por ejemplo).
+function updateFilterVisibility(dim) {
+  document.getElementById("filterCityWrap").style.display = dim === "city" ? "none" : "flex";
+  document.getElementById("filterKitchenWrap").style.display = dim === "kitchen" ? "none" : "flex";
+  document.getElementById("filterProviderWrap").style.display = dim === "provider" ? "none" : "flex";
+}
+
+async function onFilterChange() {
+  state.filters.city = document.getElementById("filterCity").value;
+  state.filters.kitchen = document.getElementById("filterKitchen").value;
+  state.filters.provider = document.getElementById("filterProvider").value;
+  localStorage.setItem("rr_filters", JSON.stringify(state.filters));
+  updateFiltersClearVisibility();
+  // Los filtros cambian el universo de datos de TODAS las dimensiones — se
+  // invalida el cache completo para forzar un refetch en cualquier pestaña.
+  state.mtd = {};
+  state.dow = {};
+  state.physical.mtdMap = null;
+  state.physical.dowMap = {};
+  state.physical.daily = null;
+  if (state.activeDim === "physical") {
+    await loadPhysicalTab();
+  } else if (state.activeDim !== "chat") {
+    await selectDim(state.activeDim);
+  }
+}
+
+function clearFilters() {
+  document.getElementById("filterCity").value = "";
+  document.getElementById("filterKitchen").value = "";
+  document.getElementById("filterProvider").value = "";
+  onFilterChange();
+}
+
+// ---------- Auto-actualización ----------
+function markUpdated() {
+  state.lastUpdated = new Date();
+  updateLastUpdatedLabel();
+}
+function updateLastUpdatedLabel() {
+  const el = document.getElementById("lastUpdated");
+  if (!el) return;
+  if (!state.lastUpdated) { el.textContent = ""; return; }
+  const t = state.lastUpdated;
+  el.textContent = "Última actualización: " + pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds());
+}
+
+// Recalcula por completo las fechas de referencia (hoy, mes actual, mes
+// anterior, mismo mes año anterior, conteo de días de la semana restantes) a
+// partir de CURRENT_DATE del warehouse. Se usa tanto en el arranque como en
+// el refresh diario, para que un día nuevo (o un cambio de mes) se refleje
+// correctamente y no se quede con las fechas del día en que se abrió la página.
+async function bootstrapDates() {
+  const hoyData = await callSQL("SELECT CURRENT_DATE AS hoy");
+  const hoyStr = rowsToArrays(hoyData)[0].hoy;
+  let [y, m, d] = hoyStr.split("-").map(Number);
+  let hoyDateObj = new Date(y, m-1, d);
+
+  // Salvaguarda contra el lag de ingesta del warehouse: el runrate = MTD real
+  // + proyección de los días que faltan del mes. Si CURRENT_DATE ya avanzó a
+  // un día nuevo pero el warehouse todavía no terminó de cargar las órdenes de
+  // ayer (ETL con 1-2 días de rezago), ese día pasa de "futuro por proyectar"
+  // a "pasado sin datos" de un salto — se pierde su GMV esperado sin haberlo
+  // reemplazado por venta real, y el runrate cae de forma artificial y
+  // transitoria (no refleja ningún cambio real del negocio). Por eso el corte
+  // ("hoy") nunca se adelanta más de 1 día al último día con datos reales.
+  state.dataFreshnessNote = null;
+  try {
+    const checkStart = new Date(hoyDateObj);
+    checkStart.setDate(checkStart.getDate() - 5);
+    const freshData = await callSQL(`
+SELECT MAX(order_day) AS ultimo_dia
+FROM fdgy_views.orders_consolidado
+WHERE country IN ('MEX', 'COL', 'PER') AND order_day >= '${fmtDate(checkStart)}' AND order_day <= '${fmtDate(hoyDateObj)}'`);
+    const ultimoDiaStr = rowsToArrays(freshData)[0].ultimo_dia;
+    if (ultimoDiaStr) {
+      const [uy, um, ud] = ultimoDiaStr.split("-").map(Number);
+      const maxHoyPermitido = new Date(uy, um-1, ud);
+      maxHoyPermitido.setDate(maxHoyPermitido.getDate() + 1);
+      if (hoyDateObj > maxHoyPermitido) {
+        console.warn(`Warehouse rezagado: CURRENT_DATE=${fmtDate(hoyDateObj)} pero el último día con datos es ${ultimoDiaStr}. Se usa ${fmtDate(maxHoyPermitido)} como corte para evitar una caída artificial del runrate.`);
+        hoyDateObj = maxHoyPermitido;
+        y = hoyDateObj.getFullYear(); m = hoyDateObj.getMonth() + 1; d = hoyDateObj.getDate();
+        state.dataFreshnessNote = `⚠️ El warehouse aún no termina de cargar órdenes hasta ${hoyStr}; el último día con datos es ${ultimoDiaStr}, así que el corte se ajustó a ${fmtDate(maxHoyPermitido)} para no subestimar el runrate.`;
+      }
+    }
+  } catch (e) {
+    console.error("No se pudo verificar el rezago de datos del warehouse (se usa CURRENT_DATE tal cual):", e);
+  }
+
+  state.hoy = fmtDate(hoyDateObj);
+  state.hoyDateObj = hoyDateObj;
+
+  const mesActualInicioObj = new Date(y, m-1, 1);
+  const mesActualFinObj = new Date(y, m, 0);
+  const mesAnteriorInicioObj = new Date(y, m-2, 1);
+  const mismoAnioInicioObj = new Date(y-1, m-1, 1);
+
+  state.mesActualInicio = fmtDate(mesActualInicioObj);
+  state.mesActualFin = fmtDate(mesActualFinObj);
+  state.mesAnteriorInicio = fmtDate(mesAnteriorInicioObj);
+  state.mismoAnioInicio = fmtDate(mismoAnioInicioObj);
+  state.currentYYYYMM = y + "-" + pad(m);
+  state.mesActualNombre = MESES_ES[m-1] + " " + y;
+
+  state.conteoDow = {};
+  const cursor = new Date(hoyDateObj);
+  while (cursor <= mesActualFinObj) {
+    const dow = cursor.getDay();
+    state.conteoDow[dow] = (state.conteoDow[dow] || 0) + 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const mesAnteriorNombre = MESES_ES[mesAnteriorInicioObj.getMonth()] + " " + mesAnteriorInicioObj.getFullYear();
+  const mismoAnioNombre = MESES_ES[mismoAnioInicioObj.getMonth()] + " " + mismoAnioInicioObj.getFullYear();
+  document.getElementById("subtitle").textContent =
+    `Corte al ${state.hoy} · Mes en curso: ${state.mesActualNombre} · Comparado con ${mesAnteriorNombre} y con ${mismoAnioNombre}` +
+    (state.dataFreshnessNote ? ` · ${state.dataFreshnessNote}` : "");
+}
+
+function invalidateAllDataCaches() {
+  state.mtd = {};
+  state.dow = {};
+  state.lastRows = {};
+  state.physical.kitchensList = null;
+  state.physical.mtdMap = null;
+  state.physical.dowMap = {};
+  state.physical.daily = null;
+  state.physical.weekly = null;
+  state.global.mtdMap = null;
+  state.global.dowMap = {};
+  state.global.physicalCounts = null;
+  state.global.physical.kitchensByCountry = null;
+  state.global.physical.mtdMap = null;
+  state.global.physical.dowMap = {};
+  state.global.physical.storeRows = null;
+  state.global.physical.countryRows = null;
+  state.global.physical.weekly = null;
+  // Se limpia el caché de datos del drill-down por país pero se conserva
+  // "open" (qué países estaban desplegados), así un refresh diario no colapsa
+  // los paneles que el usuario tenía abiertos — solo se refrescan sus datos.
+  state.global.drilldown.data = {};
+}
+
+// Lee la hora actual en la zona horaria de Bogotá vía Intl (evita tener que
+// asumir manualmente el offset UTC-5; funciona aunque cambie alguna regla
+// histórica del IANA tzdata).
+function getBogotaParts(date) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Bogota",
+    hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const map = {};
+  fmt.formatToParts(date).forEach(p => { if (p.type !== "literal") map[p.type] = p.value; });
+  return { year: +map.year, month: +map.month, day: +map.day, hour: +map.hour === 24 ? 0 : +map.hour, minute: +map.minute, second: +map.second };
+}
+
+// Milisegundos hasta las próximas 7:00 a.m. hora Bogotá. "Ahora" y "objetivo"
+// se comparan tratando la hora de Bogotá como si fuera UTC, así la resta de
+// timestamps da directamente la diferencia real de reloj de pared.
+function msUntilNextBogotaRefresh() {
+  const b = getBogotaParts(new Date());
+  const nowAsUtc = Date.UTC(b.year, b.month - 1, b.day, b.hour, b.minute, b.second);
+  let targetAsUtc = Date.UTC(b.year, b.month - 1, b.day, BOGOTA_REFRESH_HOUR, 0, 0);
+  if (targetAsUtc <= nowAsUtc) targetAsUtc += 24 * 60 * 60 * 1000;
+  return targetAsUtc - nowAsUtc;
+}
+
+async function dailyRefreshTick() {
+  if (state.autoRefresh && state.country) {
+    try {
+      await bootstrapDates();
+      invalidateAllDataCaches();
+      if (state.country === "GLOBAL") {
+        await loadGlobalView();
+        if (state.globalTab === "physical") await loadGlobalPhysicalView();
+      } else if (state.activeDim === "physical") {
+        await loadPhysicalTab();
+      } else if (state.activeDim !== "chat") {
+        await selectDim(state.activeDim);
+      }
+      markUpdated();
+      document.getElementById("status").textContent = "Actualizado automáticamente (7:00 a.m. Bogotá)";
+    } catch (e) {
+      console.error("Auto-refresh diario (7am Bogotá) error:", e);
+    }
+  }
+  scheduleDailyBogotaRefresh(); // siempre se reprograma, aunque el toggle esté apagado
+}
+
+function scheduleDailyBogotaRefresh() {
+  if (state.dailyRefreshTimer) clearTimeout(state.dailyRefreshTimer);
+  state.dailyRefreshTimer = setTimeout(dailyRefreshTick, msUntilNextBogotaRefresh());
+}
+
+// ---------- Puntos físicos (detectados dinámicamente por país) ----------
+// Filtro de canal: "" = todos, "delivery" = Rappi/Uber/DiDi (todo lo que no es
+// FoodologyPOS), "pos" = solo FoodologyPOS (venta en mostrador/sala).
+function physicalChannelClause() {
+  if (state.physical.channelFilter === "delivery") return " AND provider_new_name != 'FoodologyPOS'";
+  if (state.physical.channelFilter === "pos") return " AND provider_new_name = 'FoodologyPOS'";
+  return "";
+}
+
+// Detecta qué cocinas son "puntos físicos" genuinos (venta real en mostrador/
+// sala vía FoodologyPOS) para el país activo: cocinas con órdenes FoodologyPOS
+// en al menos PHYSICAL_MIN_POS_DAYS de los últimos 30 días. Este umbral se
+// validó contra datos reales de Redshift (corte limpio: puntos genuinos con
+// 28-30 días vs. ruido con ≤10 días).
+// Detecta los puntos físicos de un país (parametrizado para poder reusarlo
+// también desde la vista global, que necesita el conteo de los 3 países a la
+// vez sin pisar el estado de la pestaña Físicos del país activo).
+async function fetchPhysicalKitchensFor(country) {
+  const start = new Date(state.hoyDateObj);
+  start.setDate(start.getDate() - 30);
+  const sql = `
+SELECT kitchen AS dim_value, COUNT(DISTINCT order_day) AS pos_days
+FROM fdgy_views.orders_consolidado
+WHERE country = '${country}' AND provider_new_name = 'FoodologyPOS' AND kitchen IS NOT NULL
+ AND order_day >= '${fmtDate(start)}' AND order_day <= '${state.hoy}'
+GROUP BY kitchen
+HAVING COUNT(DISTINCT order_day) >= ${PHYSICAL_MIN_POS_DAYS}
+ORDER BY kitchen`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  return rows.map(r => r.dim_value).filter(Boolean);
+}
+
+async function fetchPhysicalKitchens() {
+  state.physical.kitchensList = await fetchPhysicalKitchensFor(state.country);
+}
+
+async function fetchPhysicalMTD() {
+  const kitchensList = (state.physical.kitchensList || []).map(k => `'${escapeSql(k)}'`).join(", ");
+  const sql = `
+SELECT kitchen AS dim_value,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN gmv ELSE 0 END) AS gmv_mtd,
+ SUM(CASE WHEN order_month = '${state.mesAnteriorInicio}' THEN gmv ELSE 0 END) AS gmv_mes_anterior,
+ SUM(CASE WHEN order_month = '${state.mismoAnioInicio}' THEN gmv ELSE 0 END) AS gmv_mismo_anio_anterior,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' AND provider_new_name = 'FoodologyPOS' THEN gmv ELSE 0 END) AS gmv_pos_mtd,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' AND provider_new_name != 'FoodologyPOS' THEN gmv ELSE 0 END) AS gmv_delivery_mtd,
+ COUNT(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN 1 END) AS orders_mtd,
+ COUNT(DISTINCT CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN order_day END) AS days_with_orders,
+ AVG(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' AND has_rating THEN ratings END) AS avg_rating,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN is_complaint ELSE 0 END) AS complaints_mtd
+FROM fdgy_views.orders_consolidado
+WHERE country = '${state.country}' AND kitchen IN (${kitchensList}) AND order_state IN ('Finalized', 'Canceled')${physicalChannelClause()}
+ AND ((order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}')
+      OR order_month = '${state.mesAnteriorInicio}'
+      OR order_month = '${state.mismoAnioInicio}')
+GROUP BY kitchen`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const name = r.dim_value === null ? "(sin dato)" : r.dim_value;
+    const ordersMtd = Number(r.orders_mtd) || 0;
+    const daysWithOrders = Number(r.days_with_orders) || 0;
+    const complaintsMtd = Number(r.complaints_mtd) || 0;
+    map[name] = {
+      mtd: Number(r.gmv_mtd) || 0,
+      mesAnt: Number(r.gmv_mes_anterior) || 0,
+      mismoAnt: Number(r.gmv_mismo_anio_anterior) || 0,
+      posMtd: Number(r.gmv_pos_mtd) || 0,
+      deliveryMtd: Number(r.gmv_delivery_mtd) || 0,
+      ordersMtd,
+      avgOrdersDay: daysWithOrders ? ordersMtd / daysWithOrders : null,
+      aov: ordersMtd ? (Number(r.gmv_mtd) || 0) / ordersMtd : null,
+      avgRating: r.avg_rating === null ? null : Number(r.avg_rating),
+      complaintRate: ordersMtd ? (complaintsMtd / ordersMtd * 100) : null,
+    };
+  });
+  state.physical.mtdMap = map;
+}
+
+async function fetchPhysicalDow(weeks) {
+  const days = weeks * 7;
+  const lookbackStart = new Date(state.hoyDateObj);
+  lookbackStart.setDate(lookbackStart.getDate() - days);
+  const kitchensList = (state.physical.kitchensList || []).map(k => `'${escapeSql(k)}'`).join(", ");
+  const sql = `
+SELECT kitchen AS dim_value, EXTRACT(dow FROM order_day) AS dow, SUM(gmv)/COUNT(DISTINCT order_day) AS avg_gmv_dow
+FROM fdgy_views.orders_consolidado
+WHERE order_day >= '${fmtDate(lookbackStart)}' AND order_day < '${state.hoy}'
+ AND country = '${state.country}' AND kitchen IN (${kitchensList}) AND order_state IN ('Finalized', 'Canceled')${physicalChannelClause()}
+GROUP BY kitchen, EXTRACT(dow FROM order_day)`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const name = r.dim_value === null ? "(sin dato)" : r.dim_value;
+    if (!map[name]) map[name] = {};
+    map[name][Math.round(Number(r.dow))] = Number(r.avg_gmv_dow) || 0;
+  });
+  state.physical.dowMap[weeks] = map;
+}
+
+async function fetchPhysicalDaily() {
+  const kitchensList = (state.physical.kitchensList || []).map(k => `'${escapeSql(k)}'`).join(", ");
+  const start = new Date(state.hoyDateObj);
+  start.setDate(start.getDate() - 30);
+  const sql = `
+SELECT kitchen AS dim_value, order_day,
+ COUNT(CASE WHEN provider_new_name = 'FoodologyPOS' THEN 1 END) AS orders_pos,
+ COUNT(CASE WHEN provider_new_name != 'FoodologyPOS' THEN 1 END) AS orders_delivery
+FROM fdgy_views.orders_consolidado
+WHERE country = '${state.country}' AND kitchen IN (${kitchensList}) AND order_state IN ('Finalized', 'Canceled')
+ AND order_day >= '${fmtDate(start)}' AND order_day <= '${state.hoy}'
+GROUP BY kitchen, order_day
+ORDER BY order_day`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const byKitchen = {};
+  (state.physical.kitchensList || []).forEach(k => byKitchen[k] = []);
+  rows.forEach(r => {
+    const name = r.dim_value;
+    if (!byKitchen[name]) byKitchen[name] = [];
+    byKitchen[name].push({ day: r.order_day, pos: Number(r.orders_pos) || 0, delivery: Number(r.orders_delivery) || 0 });
+  });
+  state.physical.daily = byKitchen;
+}
+
+// Tendencia semanal de venta (GMV) por punto de venta de las últimas 8
+// semanas, separada por canal (Delivery vs FoodologyPOS). Usa order_week
+// (fecha del lunes de esa semana, ya calculada en el warehouse) para agrupar,
+// así se evita reimplementar el bucketing de semanas en JS.
+async function fetchPhysicalWeekly() {
+  const kitchensList = (state.physical.kitchensList || []).map(k => `'${escapeSql(k)}'`).join(", ");
+  const start = new Date(state.hoyDateObj);
+  start.setDate(start.getDate() - 56); // 8 semanas
+  // Se alinea al lunes de esa semana para que ninguna semana quede recortada
+  // (siempre lunes a domingo, salvo la semana en curso que llega hasta hoy).
+  const alignedStart = mondayOf(start);
+  const sql = `
+SELECT kitchen AS dim_value, order_week,
+ SUM(CASE WHEN provider_new_name = 'FoodologyPOS' THEN gmv ELSE 0 END) AS gmv_pos,
+ SUM(CASE WHEN provider_new_name != 'FoodologyPOS' THEN gmv ELSE 0 END) AS gmv_delivery
+FROM fdgy_views.orders_consolidado
+WHERE country = '${state.country}' AND kitchen IN (${kitchensList}) AND order_state IN ('Finalized', 'Canceled')
+ AND order_day >= '${fmtDate(alignedStart)}' AND order_day <= '${state.hoy}'
+GROUP BY kitchen, order_week
+ORDER BY order_week`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const byKitchen = {};
+  (state.physical.kitchensList || []).forEach(k => byKitchen[k] = []);
+  rows.forEach(r => {
+    const name = r.dim_value;
+    if (!byKitchen[name]) byKitchen[name] = [];
+    byKitchen[name].push({ week: r.order_week, pos: Number(r.gmv_pos) || 0, delivery: Number(r.gmv_delivery) || 0 });
+  });
+  state.physical.weekly = byKitchen;
+}
+
+async function ensurePhysicalData(weeks) {
+  if (!state.physical.kitchensList) await fetchPhysicalKitchens();
+  if (!state.physical.kitchensList.length) {
+    // Sin puntos físicos detectados para este país (ej. Perú) — no hay nada
+    // que consultar; se dejan los mapas vacíos para que la UI lo muestre.
+    state.physical.mtdMap = {};
+    state.physical.dowMap[weeks] = {};
+    state.physical.daily = {};
+    state.physical.weekly = {};
+    return;
+  }
+  if (!state.physical.mtdMap) await fetchPhysicalMTD();
+  if (!state.physical.dowMap[weeks]) await fetchPhysicalDow(weeks);
+  if (!state.physical.daily) await fetchPhysicalDaily();
+  if (!state.physical.weekly) await fetchPhysicalWeekly();
+}
+
+function computePhysicalRows(weeks) {
+  const mtdMap = {};
+  Object.keys(state.physical.mtdMap || {}).forEach(k => {
+    const m = state.physical.mtdMap[k];
+    mtdMap[k] = { mtd: m.mtd, mesAnt: m.mesAnt, mismoAnt: m.mismoAnt };
+  });
+  const dowMap = state.physical.dowMap[weeks] || {};
+  const base = computeRunrateBase(mtdMap, dowMap);
+  base.forEach(r => {
+    const extra = state.physical.mtdMap[r.name] || {};
+    r.posMtd = extra.posMtd || 0;
+    r.deliveryMtd = extra.deliveryMtd || 0;
+    r.posShare = r.mtd ? (r.posMtd / r.mtd * 100) : null;
+    r.ordersMtd = extra.ordersMtd || 0;
+    r.avgOrdersDay = extra.avgOrdersDay;
+    r.aov = extra.aov;
+    r.avgRating = extra.avgRating;
+    r.complaintRate = extra.complaintRate;
+  });
+  base.sort((a, b) => b.runrate - a.runrate);
+  return base;
+}
+
+function physicalColumnsSpec() {
+  return [
+    { header: "Cocina", key: "name" },
+    { header: `RR ${state.mesActualNombre}`, key: "runrate", money: true },
+    { header: "GMV Last Month", key: "mesAnt", money: true },
+    { header: "GMV Last Year", key: "mismoAnt", money: true },
+    { header: "Crec vs LM", key: "crecMesAnt", growth: true },
+    { header: "Crec vs LY", key: "crecMismoAnt", growth: true },
+    { header: "GMV Delivery MTD", key: "deliveryMtd", money: true },
+    { header: "GMV FoodologyPOS MTD", key: "posMtd", money: true },
+    { header: "% POS del total", key: "posShare", pctPlain: true, allowNull: true },
+    { header: "Órdenes MTD", key: "ordersMtd", plainNum: true },
+    { header: "Órdenes/día prom.", key: "avgOrdersDay", plainNum: true, decimals: 1, allowNull: true },
+    { header: "Ticket promedio (AOV)", key: "aov", money: true, allowNull: true },
+    { header: "Calificación prom.", key: "avgRating", plainNum: true, decimals: 2, allowNull: true },
+    { header: "% Quejas", key: "complaintRate", pctPlain: true, allowNull: true },
+  ];
+}
+
+function renderPhysicalTable(rows) {
+  const spec = physicalColumnsSpec();
+  const pctCompare = (a, b) => {
+    const av = (a && a.pct !== null && a.pct !== undefined) ? a.pct : -Infinity;
+    const bv = (b && b.pct !== null && b.pct !== undefined) ? b.pct : -Infinity;
+    return av - bv;
+  };
+  const columns = spec.map(c => {
+    if (c.growth) return { name: c.header, sort: { compare: pctCompare }, formatter: (cell) => gridjs.html(fmtPctAbs(cell.pct, cell.abs)) };
+    if (c.money) return { name: c.header, sort: true, formatter: (cell) => (cell === null || cell === undefined) ? "N/D" : fmtMoney(cell) };
+    if (c.pctPlain) return { name: c.header, sort: true, formatter: (cell) => (cell === null || cell === undefined) ? "N/D" : cell.toFixed(1) + "%" };
+    if (c.plainNum) return { name: c.header, sort: true, formatter: (cell) => (cell === null || cell === undefined) ? "N/D" : cell.toFixed(c.decimals || 0).toLocaleString("es-MX") };
+    return { name: c.header, sort: true };
+  });
+  const gjsRows = rows.map(r => spec.map(c => {
+    if (c.growth) return { pct: r[c.key + "Pct"], abs: r[c.key + "Abs"] };
+    return r[c.key];
+  }));
+  document.getElementById("physical-grid-container").innerHTML = "";
+  new gridjs.Grid({
+    columns: columns,
+    data: gjsRows,
+    sort: true,
+    search: true,
+    pagination: { limit: 10 },
+    className: { table: "gridjs-table" },
+  }).render(document.getElementById("physical-grid-container"));
+}
+
+function renderPhysicalChart(kitchen) {
+  const canvas = document.getElementById("physicalChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const daily = (state.physical.daily && state.physical.daily[kitchen]) || [];
+  const labels = daily.map(d => d.day.slice(5));
+  const posData = daily.map(d => d.pos);
+  const deliveryData = daily.map(d => d.delivery);
+  // El filtro de canal de la tabla también recorta qué barras se muestran en
+  // la gráfica: si el usuario eligió "Solo Delivery" o "Solo FoodologyPOS",
+  // no tiene sentido seguir mostrando el otro canal apilado.
+  const showDelivery = state.physical.channelFilter !== "pos";
+  const showPos = state.physical.channelFilter !== "delivery";
+  const datasets = [];
+  if (showDelivery) datasets.push({ label: "Delivery (Rappi/Uber/DiDi)", data: deliveryData, backgroundColor: "#14225B", stack: "orders" });
+  if (showPos) datasets.push({ label: "FoodologyPOS (mostrador)", data: posData, backgroundColor: "#DF99B9", stack: "orders" });
+  if (state.physical.chart) { state.physical.chart.destroy(); state.physical.chart = null; }
+  state.physical.chart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: "Órdenes/día" } } },
+      plugins: { legend: { position: "bottom" } },
+    },
+  });
+}
+
+function renderPhysicalWeeklyChart(kitchen) {
+  const canvas = document.getElementById("physicalWeeklyChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const weekly = (state.physical.weekly && state.physical.weekly[kitchen]) || [];
+  // Semanas siempre lunes-domingo (order_week ya viene del warehouse como el
+  // lunes de esa semana, y el fetch se alinea al lunes al armar el rango).
+  const labels = weekly.map(w => weekLabel(w.week));
+  const ranges = weekly.map(w => weekRangeLabel(w.week));
+  const posData = weekly.map(w => w.pos);
+  const deliveryData = weekly.map(w => w.delivery);
+  const showDelivery = state.physical.channelFilter !== "pos";
+  const showPos = state.physical.channelFilter !== "delivery";
+  const datasets = [];
+  if (showDelivery) datasets.push({ label: "Delivery (Rappi/Uber/DiDi)", data: deliveryData, backgroundColor: "#14225B", stack: "week" });
+  if (showPos) datasets.push({ label: "FoodologyPOS (mostrador)", data: posData, backgroundColor: "#DF99B9", stack: "week" });
+  if (state.physical.weeklyChart) { state.physical.weeklyChart.destroy(); state.physical.weeklyChart = null; }
+  state.physical.weeklyChart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, title: { display: true, text: "Semana (lunes)" } },
+        y: { stacked: true, beginAtZero: true, title: { display: true, text: `GMV semanal (${currencySymbol()})` }, ticks: { callback: (v) => fmtMoney(convertCurrency(v)) } },
+      },
+      plugins: {
+        legend: { position: "bottom" },
+        tooltip: {
+          callbacks: {
+            title: (items) => `Semana ${ranges[items[0].dataIndex] || ""}`,
+            label: (ctx) => `${ctx.dataset.label}: ${fmtMoney(convertCurrency(ctx.parsed.y))}`,
+          },
+        },
+      },
+    },
+  });
+}
+
+function physicalRowsToCSVLines(rows) {
+  const spec = physicalColumnsSpec();
+  const lines = [spec.map(c => csvEscape(c.header)).join(",")];
+  rows.forEach(r => {
+    const line = spec.map(c => {
+      if (c.growth) {
+        const pct = r[c.key + "Pct"], abs = r[c.key + "Abs"];
+        if (pct === null || pct === undefined || !isFinite(pct)) return csvEscape("N/A");
+        const prefix = currencySymbol();
+        return csvEscape(`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% (${abs >= 0 ? "+" : "-"}${prefix}${fmtNum(Math.abs(convertCurrency(abs)))})`);
+      }
+      if (c.money) return csvEscape(r[c.key] === null || r[c.key] === undefined ? "N/D" : Math.round(convertCurrency(r[c.key])));
+      if (c.pctPlain) return csvEscape(r[c.key] === null || r[c.key] === undefined ? "N/D" : r[c.key].toFixed(1) + "%");
+      if (c.plainNum) return csvEscape(r[c.key] === null || r[c.key] === undefined ? "N/D" : r[c.key].toFixed(c.decimals || 0));
+      return csvEscape(r[c.key]);
+    });
+    lines.push(line.join(","));
+  });
+  return lines;
+}
+
+function exportPhysicalCSV() {
+  if (!state.physical.rows) return;
+  const lines = [`Moneda: ${state.currency}`, ""].concat(physicalRowsToCSVLines(state.physical.rows));
+  downloadCSV(`runrate_${state.country}_fisicos_${state.currency}_${state.hoy}.csv`, lines.join("\r\n"));
+}
+
+function updatePhysicalNote() {
+  const note = document.getElementById("physicalNote");
+  if (!note) return;
+  const countryLabel = (COUNTRIES[state.country] && COUNTRIES[state.country].label) || state.country;
+  const countText = state.physical.kitchensList
+    ? ` (${state.physical.kitchensList.length} punto${state.physical.kitchensList.length === 1 ? "" : "s"} detectado${state.physical.kitchensList.length === 1 ? "" : "s"} en ${countryLabel}, ≥${PHYSICAL_MIN_POS_DAYS} días con venta FoodologyPOS de los últimos 30)`
+    : ` (detectando puntos físicos en ${countryLabel}…)`;
+  const base = `Puntos físicos con venta en sala/mostrador (FoodologyPOS) además de delivery${countText}. RR = runrate del mes actual. Incluye Finalized + Canceled, consistente con el resto del reporte. Ticket promedio (AOV) y calificación se calculan sobre el mes en curso.`;
+  if (state.physical.channelFilter === "delivery") {
+    note.innerHTML = base + " <strong>Filtrado por canal: solo Delivery (Rappi/Uber/DiDi).</strong>";
+  } else if (state.physical.channelFilter === "pos") {
+    note.innerHTML = base + " <strong>Filtrado por canal: solo FoodologyPOS (mostrador).</strong>";
+  } else {
+    note.textContent = base;
+  }
+}
+
+// Repuebla el selector de cocina de la gráfica con las cocinas detectadas
+// dinámicamente para el país activo (reemplaza la lista fija anterior).
+function updatePhysicalKitchenSelect() {
+  const sel = document.getElementById("physicalKitchenSelect");
+  if (!sel) return;
+  const list = state.physical.kitchensList || [];
+  if (!list.length) {
+    sel.innerHTML = '<option value="">Sin puntos físicos</option>';
+    sel.disabled = true;
+    state.physical.selectedKitchen = "";
+    return;
+  }
+  sel.disabled = false;
+  const current = list.includes(state.physical.selectedKitchen) ? state.physical.selectedKitchen : list[0];
+  state.physical.selectedKitchen = current;
+  sel.innerHTML = list.map(k => `<option value="${escapeHtml(k)}"${k === current ? " selected" : ""}>${escapeHtml(k)}</option>`).join("");
+}
+
+async function loadPhysicalTab() {
+  document.getElementById("status").textContent = "Cargando puntos físicos…";
+  document.getElementById("physical-grid-container").innerHTML = '<div class="loading">Cargando datos del warehouse…</div>';
+  updatePhysicalNote();
+  const myToken = ++state.renderToken;
+  try {
+    await ensurePhysicalData(state.lookbackWeeks);
+    if (myToken !== state.renderToken) return;
+    updatePhysicalKitchenSelect();
+    updatePhysicalNote();
+    if (!state.physical.kitchensList || !state.physical.kitchensList.length) {
+      const countryLabel = (COUNTRIES[state.country] && COUNTRIES[state.country].label) || state.country;
+      document.getElementById("physical-grid-container").innerHTML =
+        `<div class="loading">No se detectaron puntos físicos con venta FoodologyPOS (≥${PHYSICAL_MIN_POS_DAYS} días de los últimos 30) para ${countryLabel}.</div>`;
+      if (state.physical.chart) { state.physical.chart.destroy(); state.physical.chart = null; }
+      if (state.physical.weeklyChart) { state.physical.weeklyChart.destroy(); state.physical.weeklyChart = null; }
+      document.getElementById("status").textContent = "Sin puntos físicos";
+      return;
+    }
+    const rows = computePhysicalRows(state.lookbackWeeks);
+    state.physical.rows = rows;
+    renderPhysicalTable(rows);
+    renderPhysicalChart(state.physical.selectedKitchen);
+    renderPhysicalWeeklyChart(state.physical.selectedKitchen);
+    markUpdated();
+    document.getElementById("status").textContent = "Actualizado";
+  } catch (e) {
+    if (myToken !== state.renderToken) return;
+    document.getElementById("physical-grid-container").innerHTML = '<div class="loading">Error cargando datos: ' + e.message + '</div>';
+    document.getElementById("status").textContent = "Error";
+  }
+}
+
+async function onPhysicalChannelChange(e) {
+  state.physical.channelFilter = e.target.value;
+  localStorage.setItem("rr_physicalChannel", state.physical.channelFilter);
+  // El canal cambia el universo de datos base (mtd/dow); el detalle diario
+  // (delivery vs pos) no depende del filtro así que no hace falta invalidarlo.
+  state.physical.mtdMap = null;
+  state.physical.dowMap = {};
+  await loadPhysicalTab();
+}
+
+// ---------- Home / selector de país ----------
+function showHome() {
+  document.getElementById("homeView").style.display = "flex";
+  document.getElementById("dashboardShell").style.display = "none";
+  document.getElementById("globalView").style.display = "none";
+}
+function showDashboard() {
+  document.getElementById("homeView").style.display = "none";
+  document.getElementById("dashboardShell").style.display = "block";
+  document.getElementById("globalView").style.display = "none";
+}
+function showGlobal() {
+  document.getElementById("homeView").style.display = "none";
+  document.getElementById("dashboardShell").style.display = "none";
+  document.getElementById("globalView").style.display = "block";
+}
+
+// Actualiza toda la UI que depende del país activo: bandera/nombre en el
+// header, etiqueta de la moneda local en el toggle, y la nota del footer.
+function applyCountryUI() {
+  const c = COUNTRIES[state.country];
+  if (!c) return;
+  const badge = document.getElementById("countryBadge");
+  if (badge) badge.textContent = `${c.flag} ${c.label}`;
+  const localBtn = document.getElementById("localCurrencyBtn");
+  if (localBtn) localBtn.textContent = c.currency;
+  const footer = document.getElementById("footerNote");
+  if (footer) {
+    footer.textContent = `Fuente: fdgy_views.orders_consolidado (Redshift) · país ${c.label} (${state.country}) · incluye órdenes Finalized + Canceled (suma de ambas) salvo donde se indique lo contrario · provider excluye PideDirecto y Justo (sin volumen relevante) · runrate ajustado por día de la semana usando el promedio de GMV de la ventana seleccionada, aplicado a los días de la semana que faltan en el mes actual · USD calculado como ${c.currency}/${usdRate()} (tipo de cambio de referencia fijo, no de mercado en tiempo real).`;
+  }
+}
+
+// Cambia de país: reinicia todos los caches y filtros (los datos de un país no
+// aplican a otro), muestra el dashboard y recarga todo desde cero.
+async function selectCountry(country) {
+  if (!COUNTRIES[country]) return;
+  state.country = country;
+  localStorage.setItem("rr_country", country);
+  state.currency = "LOCAL";
+  document.querySelectorAll("#currencySeg .seg-btn").forEach(b => b.classList.toggle("active", b.dataset.currency === "LOCAL"));
+  invalidateAllDataCaches();
+  state.filters = { city: "", kitchen: "", provider: "" };
+  localStorage.setItem("rr_filters", JSON.stringify(state.filters));
+  ["filterCity", "filterKitchen", "filterProvider"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  updateFiltersClearVisibility();
+  applyCountryUI();
+  showDashboard();
+  document.getElementById("status").textContent = "Cargando " + COUNTRIES[country].label + "…";
+  if (!state.hoy) await bootstrapDates();
+  loadFilterOptions().catch(e => console.error("No se pudieron cargar las opciones de filtro:", e));
+  await selectDim(state.activeDim === "chat" ? "city" : state.activeDim);
+  scheduleDailyBogotaRefresh();
+}
+
+function goHome() {
+  showHome();
+}
+
+// ---------- Vista global consolidada (México + Colombia + Perú) ----------
+// Siempre en USD (es la única moneda común entre los 3 países); no usa el
+// toggle LOCAL/USD ni depende de state.country más que para saber qué mostrar
+// como "activo" en el home al volver.
+const GLOBAL_COUNTRY_CODES = ["MEX", "COL", "PER"];
+
+async function fetchGlobalMTD() {
+  const codes = GLOBAL_COUNTRY_CODES.map(c => `'${c}'`).join(", ");
+  const sql = `
+SELECT country AS dim_value,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN gmv ELSE 0 END) AS gmv_mtd,
+ SUM(CASE WHEN order_month = '${state.mesAnteriorInicio}' THEN gmv ELSE 0 END) AS gmv_mes_anterior,
+ SUM(CASE WHEN order_month = '${state.mismoAnioInicio}' THEN gmv ELSE 0 END) AS gmv_mismo_anio_anterior
+FROM fdgy_views.orders_consolidado
+WHERE country IN (${codes}) AND order_state IN ('Finalized', 'Canceled')
+ AND ((order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}')
+      OR order_month = '${state.mesAnteriorInicio}'
+      OR order_month = '${state.mismoAnioInicio}')
+GROUP BY country`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    map[r.dim_value] = {
+      mtd: Number(r.gmv_mtd) || 0,
+      mesAnt: Number(r.gmv_mes_anterior) || 0,
+      mismoAnt: Number(r.gmv_mismo_anio_anterior) || 0,
+    };
+  });
+  state.global.mtdMap = map;
+}
+
+async function fetchGlobalDow(weeks) {
+  const days = weeks * 7;
+  const lookbackStart = new Date(state.hoyDateObj);
+  lookbackStart.setDate(lookbackStart.getDate() - days);
+  const codes = GLOBAL_COUNTRY_CODES.map(c => `'${c}'`).join(", ");
+  const sql = `
+SELECT country AS dim_value, EXTRACT(dow FROM order_day) AS dow, SUM(gmv)/COUNT(DISTINCT order_day) AS avg_gmv_dow
+FROM fdgy_views.orders_consolidado
+WHERE order_day >= '${fmtDate(lookbackStart)}' AND order_day < '${state.hoy}'
+ AND country IN (${codes}) AND order_state IN ('Finalized', 'Canceled')
+GROUP BY country, EXTRACT(dow FROM order_day)`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const name = r.dim_value;
+    if (!map[name]) map[name] = {};
+    map[name][Math.round(Number(r.dow))] = Number(r.avg_gmv_dow) || 0;
+  });
+  state.global.dowMap[weeks] = map;
+}
+
+// Detecta los puntos físicos de los 3 países una sola vez y los comparte
+// entre la pestaña Consolidado (solo necesita el conteo) y la pestaña
+// Puntos Físicos (necesita la lista completa) — evita duplicar consultas.
+async function ensureGlobalPhysicalKitchens() {
+  if (state.global.physical.kitchensByCountry) return;
+  const byCountry = {};
+  await Promise.all(GLOBAL_COUNTRY_CODES.map(async (c) => {
+    byCountry[c] = await fetchPhysicalKitchensFor(c);
+  }));
+  state.global.physical.kitchensByCountry = byCountry;
+  const counts = {};
+  GLOBAL_COUNTRY_CODES.forEach(c => { counts[c] = (byCountry[c] || []).length; });
+  state.global.physicalCounts = counts;
+}
+
+async function ensureGlobalData(weeks) {
+  if (!state.global.mtdMap) await fetchGlobalMTD();
+  if (!state.global.dowMap[weeks]) await fetchGlobalDow(weeks);
+  await ensureGlobalPhysicalKitchens();
+}
+
+function allGlobalPhysicalKitchenPairs() {
+  const pairs = [];
+  const byCountry = state.global.physical.kitchensByCountry || {};
+  GLOBAL_COUNTRY_CODES.forEach(c => {
+    (byCountry[c] || []).forEach(k => pairs.push({ country: c, kitchen: k }));
+  });
+  return pairs;
+}
+
+// Filtro de canal para la pestaña Puntos Físicos del consolidado global:
+// "" = todos (FoodologyPOS + Delivery), "delivery" = solo delivery, "pos" =
+// solo FoodologyPOS (mostrador). Mismo criterio que physicalChannelClause()
+// pero con su propio estado (state.global.physical.channelFilter) para no
+// interferir con el filtro del dashboard por país.
+function globalPhysicalChannelClause() {
+  if (state.global.physical.channelFilter === "delivery") return " AND provider_new_name != 'FoodologyPOS'";
+  if (state.global.physical.channelFilter === "pos") return " AND provider_new_name = 'FoodologyPOS'";
+  return "";
+}
+function globalPhysicalChannelLabel() {
+  if (state.global.physical.channelFilter === "delivery") return "Delivery";
+  if (state.global.physical.channelFilter === "pos") return "FoodologyPOS";
+  return "FoodologyPOS + Delivery";
+}
+
+async function fetchGlobalPhysicalMTD() {
+  const pairs = allGlobalPhysicalKitchenPairs();
+  if (!pairs.length) { state.global.physical.mtdMap = {}; return; }
+  const codes = GLOBAL_COUNTRY_CODES.map(c => `'${c}'`).join(", ");
+  const kitchensList = [...new Set(pairs.map(p => p.kitchen))].map(k => `'${escapeSql(k)}'`).join(", ");
+  const sql = `
+SELECT country AS country_value, kitchen AS dim_value,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN gmv ELSE 0 END) AS gmv_mtd,
+ SUM(CASE WHEN order_month = '${state.mesAnteriorInicio}' THEN gmv ELSE 0 END) AS gmv_mes_anterior,
+ SUM(CASE WHEN order_month = '${state.mismoAnioInicio}' THEN gmv ELSE 0 END) AS gmv_mismo_anio_anterior
+FROM fdgy_views.orders_consolidado
+WHERE country IN (${codes}) AND kitchen IN (${kitchensList}) AND order_state IN ('Finalized', 'Canceled')${globalPhysicalChannelClause()}
+ AND ((order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}')
+      OR order_month = '${state.mesAnteriorInicio}'
+      OR order_month = '${state.mismoAnioInicio}')
+GROUP BY country, kitchen`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const key = r.country_value + "|" + r.dim_value;
+    map[key] = {
+      mtd: Number(r.gmv_mtd) || 0,
+      mesAnt: Number(r.gmv_mes_anterior) || 0,
+      mismoAnt: Number(r.gmv_mismo_anio_anterior) || 0,
+    };
+  });
+  state.global.physical.mtdMap = map;
+}
+
+async function fetchGlobalPhysicalDow(weeks) {
+  const pairs = allGlobalPhysicalKitchenPairs();
+  if (!pairs.length) { state.global.physical.dowMap[weeks] = {}; return; }
+  const days = weeks * 7;
+  const lookbackStart = new Date(state.hoyDateObj);
+  lookbackStart.setDate(lookbackStart.getDate() - days);
+  const codes = GLOBAL_COUNTRY_CODES.map(c => `'${c}'`).join(", ");
+  const kitchensList = [...new Set(pairs.map(p => p.kitchen))].map(k => `'${escapeSql(k)}'`).join(", ");
+  const sql = `
+SELECT country AS country_value, kitchen AS dim_value, EXTRACT(dow FROM order_day) AS dow, SUM(gmv)/COUNT(DISTINCT order_day) AS avg_gmv_dow
+FROM fdgy_views.orders_consolidado
+WHERE order_day >= '${fmtDate(lookbackStart)}' AND order_day < '${state.hoy}'
+ AND country IN (${codes}) AND kitchen IN (${kitchensList}) AND order_state IN ('Finalized', 'Canceled')${globalPhysicalChannelClause()}
+GROUP BY country, kitchen, EXTRACT(dow FROM order_day)`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const key = r.country_value + "|" + r.dim_value;
+    if (!map[key]) map[key] = {};
+    map[key][Math.round(Number(r.dow))] = Number(r.avg_gmv_dow) || 0;
+  });
+  state.global.physical.dowMap[weeks] = map;
+}
+
+// Tendencia semanal de venta (GMV) por tienda de los 3 países, últimas 8
+// semanas, separada por canal — no depende del filtro de canal (se calcula
+// siempre para ambos canales; el filtro solo decide qué líneas se muestran
+// al graficar, igual que en el dashboard por país).
+async function fetchGlobalPhysicalWeekly() {
+  const pairs = allGlobalPhysicalKitchenPairs();
+  if (!pairs.length) { state.global.physical.weekly = {}; return; }
+  const codes = GLOBAL_COUNTRY_CODES.map(c => `'${c}'`).join(", ");
+  const kitchensList = [...new Set(pairs.map(p => p.kitchen))].map(k => `'${escapeSql(k)}'`).join(", ");
+  const start = new Date(state.hoyDateObj);
+  start.setDate(start.getDate() - 56); // 8 semanas
+  // Se alinea al lunes de esa semana para que ninguna semana quede recortada
+  // (siempre lunes a domingo, salvo la semana en curso que llega hasta hoy).
+  const alignedStart = mondayOf(start);
+  const sql = `
+SELECT country AS country_value, kitchen AS dim_value, order_week,
+ SUM(CASE WHEN provider_new_name = 'FoodologyPOS' THEN gmv ELSE 0 END) AS gmv_pos,
+ SUM(CASE WHEN provider_new_name != 'FoodologyPOS' THEN gmv ELSE 0 END) AS gmv_delivery
+FROM fdgy_views.orders_consolidado
+WHERE country IN (${codes}) AND kitchen IN (${kitchensList}) AND order_state IN ('Finalized', 'Canceled')
+ AND order_day >= '${fmtDate(alignedStart)}' AND order_day <= '${state.hoy}'
+GROUP BY country, kitchen, order_week
+ORDER BY order_week`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const key = r.country_value + "|" + r.dim_value;
+    if (!map[key]) map[key] = [];
+    map[key].push({ week: r.order_week, pos: Number(r.gmv_pos) || 0, delivery: Number(r.gmv_delivery) || 0 });
+  });
+  state.global.physical.weekly = map;
+}
+
+async function ensureGlobalPhysicalDetailData(weeks) {
+  await ensureGlobalPhysicalKitchens();
+  if (!state.global.physical.mtdMap) await fetchGlobalPhysicalMTD();
+  if (!state.global.physical.dowMap[weeks]) await fetchGlobalPhysicalDow(weeks);
+  if (!state.global.physical.weekly) await fetchGlobalPhysicalWeekly();
+}
+
+// Calcula tanto el desglose por tienda (storeRows) como su rollup por país
+// (countryRows, sumando las mismas filas de tienda para garantizar que los
+// dos niveles cuadren exactamente entre sí).
+function computeGlobalPhysicalRows(weeks) {
+  const mtdMap = state.global.physical.mtdMap || {};
+  const dowMap = state.global.physical.dowMap[weeks] || {};
+  const base = computeRunrateBase(mtdMap, dowMap); // name = "country|kitchen"
+
+  const storeRows = base.map(r => {
+    const sep = r.name.indexOf("|");
+    const country = r.name.slice(0, sep);
+    const kitchen = r.name.slice(sep + 1);
+    const c = COUNTRIES[country];
+    const rate = (c && c.fxToUsd) || 1;
+    const toUsd = (v) => (v === null || v === undefined) ? v : v / rate;
+    return {
+      country,
+      kitchen,
+      countryLabel: (c && c.label) || country,
+      flag: (c && c.flag) || "",
+      runrateUsd: toUsd(r.runrate),
+      mesAntUsd: toUsd(r.mesAnt),
+      mismoAntUsd: toUsd(r.mismoAnt),
+      crecMesAntPct: r.crecMesAntPct,
+      crecMesAntAbsUsd: toUsd(r.crecMesAntAbs),
+      crecMismoAntPct: r.crecMismoAntPct,
+      crecMismoAntAbsUsd: toUsd(r.crecMismoAntAbs),
+    };
+  });
+  storeRows.sort((a, b) => b.runrateUsd - a.runrateUsd);
+
+  const totals = {};
+  GLOBAL_COUNTRY_CODES.forEach(c => { totals[c] = { runrateUsd: 0, mesAntUsd: 0, mismoAntUsd: 0, storeCount: 0 }; });
+  storeRows.forEach(r => {
+    const t = totals[r.country];
+    if (!t) return;
+    t.runrateUsd += r.runrateUsd;
+    t.mesAntUsd += r.mesAntUsd;
+    t.mismoAntUsd += r.mismoAntUsd;
+    t.storeCount += 1;
+  });
+  const countryRows = GLOBAL_COUNTRY_CODES.map(country => {
+    const t = totals[country];
+    const c = COUNTRIES[country];
+    const crecMesAntAbsUsd = t.runrateUsd - t.mesAntUsd;
+    const crecMesAntPct = t.mesAntUsd ? (crecMesAntAbsUsd / t.mesAntUsd * 100) : null;
+    const crecMismoAntAbsUsd = t.runrateUsd - t.mismoAntUsd;
+    const crecMismoAntPct = t.mismoAntUsd ? (crecMismoAntAbsUsd / t.mismoAntUsd * 100) : null;
+    return {
+      country, label: c.label, flag: c.flag, storeCount: t.storeCount,
+      runrateUsd: t.runrateUsd, mesAntUsd: t.mesAntUsd, mismoAntUsd: t.mismoAntUsd,
+      crecMesAntPct, crecMesAntAbsUsd, crecMismoAntPct, crecMismoAntAbsUsd,
+    };
+  });
+  countryRows.sort((a, b) => b.runrateUsd - a.runrateUsd);
+
+  return { storeRows, countryRows };
+}
+
+const GLOBAL_PHYSICAL_INSIGHTS_MIN_USD = 1000;
+
+function renderGlobalPhysicalKPIs(storeRows) {
+  const strip = document.getElementById("globalPhysicalKpiStrip");
+  const totalRunrate = storeRows.reduce((s, r) => s + r.runrateUsd, 0);
+  const totalMesAnt = storeRows.reduce((s, r) => s + r.mesAntUsd, 0);
+  const totalMismoAnt = storeRows.reduce((s, r) => s + r.mismoAntUsd, 0);
+  const crecMesAntAbs = totalRunrate - totalMesAnt;
+  const crecMesAntPct = totalMesAnt ? (crecMesAntAbs / totalMesAnt * 100) : null;
+  const crecMismoAntAbs = totalRunrate - totalMismoAnt;
+  const crecMismoAntPct = totalMismoAnt ? (crecMismoAntAbs / totalMismoAnt * 100) : null;
+  strip.innerHTML = `
+    <div class="tstat">
+      <div class="tlabel">Runrate ${globalPhysicalChannelLabel()} ${state.mesActualNombre}</div>
+      <div class="tvalue">${fmtUSD(totalRunrate)}</div>
+      <div class="tsub">${storeRows.length} tienda${storeRows.length === 1 ? "" : "s"} con punto físico activo</div>
+    </div>
+    <div class="tstat">
+      <div class="tlabel">Vs. mes anterior</div>
+      <div class="tvalue">${fmtGrowthUSD(crecMesAntPct, crecMesAntAbs)}</div>
+      <div class="tsub">${fmtUSD(totalMesAnt)}</div>
+    </div>
+    <div class="tstat">
+      <div class="tlabel">Vs. mismo mes año anterior</div>
+      <div class="tvalue">${fmtGrowthUSD(crecMismoAntPct, crecMismoAntAbs)}</div>
+      <div class="tsub">${fmtUSD(totalMismoAnt)}</div>
+    </div>
+  `;
+}
+
+function renderGlobalPhysicalInsights(storeRows) {
+  const growthBox = document.getElementById("globalPhysicalInsightGrowth");
+  const declineBox = document.getElementById("globalPhysicalInsightDecline");
+  const eligible = storeRows.filter(r => r.mesAntUsd >= GLOBAL_PHYSICAL_INSIGHTS_MIN_USD && r.crecMesAntPct !== null && isFinite(r.crecMesAntPct));
+  const itemHtml = (r) => `<div class="insight-item"><span class="insight-name">${r.flag} ${escapeHtml(r.kitchen)} <span style="color:var(--text-soft); font-weight:500;">(${escapeHtml(r.countryLabel)})</span></span>${fmtGrowthUSD(r.crecMesAntPct, r.crecMesAntAbsUsd)}</div>`;
+  const best = [...eligible].sort((a, b) => b.crecMesAntPct - a.crecMesAntPct)[0];
+  const worst = [...eligible].sort((a, b) => a.crecMesAntPct - b.crecMesAntPct)[0];
+  growthBox.innerHTML = (best && best.crecMesAntPct > 0) ? itemHtml(best) : '<div class="insight-empty">Ninguna tienda registra crecimiento vs. el mes anterior.</div>';
+  declineBox.innerHTML = (worst && worst.crecMesAntPct < 0) ? itemHtml(worst) : '<div class="insight-empty">Ninguna tienda registra caída vs. el mes anterior.</div>';
+}
+
+function renderGlobalPhysicalCountryTable(countryRows) {
+  const totalRunrate = countryRows.reduce((s, r) => s + r.runrateUsd, 0);
+  const container = document.getElementById("global-physical-country-container");
+  const body = countryRows.map(r => {
+    const share = totalRunrate ? (r.runrateUsd / totalRunrate * 100) : 0;
+    return `
+      <tr>
+        <td>
+          <div class="global-country-name"><span class="flag">${r.flag}</span>${escapeHtml(r.label)}</div>
+          <div class="global-share-bar"><div style="width:${share.toFixed(1)}%"></div></div>
+        </td>
+        <td><strong>${fmtUSD(r.runrateUsd)}</strong></td>
+        <td>${share.toFixed(1)}%</td>
+        <td>${r.storeCount}</td>
+        <td>${fmtUSD(r.mesAntUsd)}</td>
+        <td>${fmtUSD(r.mismoAntUsd)}</td>
+        <td>${fmtGrowthUSD(r.crecMesAntPct, r.crecMesAntAbsUsd)}</td>
+        <td>${fmtGrowthUSD(r.crecMismoAntPct, r.crecMismoAntAbsUsd)}</td>
+      </tr>`;
+  }).join("");
+  container.innerHTML = `
+    <table class="global-country-table">
+      <thead><tr>
+        <th>País</th><th>RR ${globalPhysicalChannelLabel()}</th><th>% del total</th><th>Tiendas</th>
+        <th>GMV Last Month</th><th>GMV Last Year</th><th>Crec vs LM</th><th>Crec vs LY</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+
+function globalPhysicalColumnsSpec() {
+  return [
+    { header: "País", key: "countryLabel" },
+    { header: "Tienda", key: "kitchen" },
+    { header: `RR ${globalPhysicalChannelLabel()} ${state.mesActualNombre}`, key: "runrateUsd", money: true },
+    { header: "GMV Last Month", key: "mesAntUsd", money: true },
+    { header: "GMV Last Year", key: "mismoAntUsd", money: true },
+    { header: "Crec vs LM", key: "crecMesAnt", growth: true },
+    { header: "Crec vs LY", key: "crecMismoAnt", growth: true },
+  ];
+}
+
+function renderGlobalPhysicalStoreTable(storeRows) {
+  const spec = globalPhysicalColumnsSpec();
+  const pctCompare = (a, b) => {
+    const av = (a && a.pct !== null && a.pct !== undefined) ? a.pct : -Infinity;
+    const bv = (b && b.pct !== null && b.pct !== undefined) ? b.pct : -Infinity;
+    return av - bv;
+  };
+  const columns = spec.map(c => {
+    if (c.growth) return { name: c.header, sort: { compare: pctCompare }, formatter: (cell) => gridjs.html(fmtGrowthUSD(cell.pct, cell.abs)) };
+    if (c.money) return { name: c.header, sort: true, formatter: (cell) => fmtUSD(cell) };
+    return { name: c.header, sort: true };
+  });
+  const gjsRows = storeRows.map(r => spec.map(c => {
+    if (c.growth) return { pct: r[c.key + "Pct"], abs: r[c.key + "AbsUsd"] };
+    return r[c.key];
+  }));
+  document.getElementById("global-physical-store-container").innerHTML = "";
+  new gridjs.Grid({
+    columns: columns,
+    data: gjsRows,
+    sort: true,
+    search: true,
+    pagination: { limit: 10 },
+    className: { table: "gridjs-table" },
+  }).render(document.getElementById("global-physical-store-container"));
+}
+
+function renderGlobalPhysicalChart(storeRows) {
+  const canvas = document.getElementById("globalPhysicalChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const titleEl = document.getElementById("globalPhysicalChartTitle");
+  if (titleEl) titleEl.textContent = `Runrate ${globalPhysicalChannelLabel()} por tienda (USD)`;
+  if (state.global.physical.chart) { state.global.physical.chart.destroy(); state.global.physical.chart = null; }
+  const countryColor = { MEX: "#14225B", COL: "#DF99B9", PER: "#E8D2AE" };
+  const sorted = [...storeRows].sort((a, b) => a.runrateUsd - b.runrateUsd); // ascendente: la barra mayor queda arriba en horizontal
+  state.global.physical.chart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: sorted.map(r => `${r.flag} ${r.kitchen}`),
+      datasets: [{ label: `Runrate ${globalPhysicalChannelLabel()} ${state.mesActualNombre} (USD)`, data: sorted.map(r => r.runrateUsd), backgroundColor: sorted.map(r => countryColor[r.country] || "#999") }],
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { x: { beginAtZero: true, ticks: { callback: (v) => fmtUSD(v) } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmtUSD(ctx.parsed.x) } } },
+    },
+  });
+}
+
+// Repuebla el selector de tienda del gráfico de tendencia semanal con las
+// tiendas detectadas (ordenadas por runrate, igual que la tabla), conservando
+// la selección previa si sigue existiendo.
+function updateGlobalPhysicalStoreSelect(storeRows) {
+  const sel = document.getElementById("globalPhysicalWeeklyStoreSelect");
+  if (!sel) return;
+  const rows = storeRows || [];
+  if (!rows.length) {
+    sel.innerHTML = '<option value="">Sin puntos físicos</option>';
+    sel.disabled = true;
+    state.global.physical.selectedStore = "";
+    return;
+  }
+  sel.disabled = false;
+  const keys = rows.map(r => `${r.country}|${r.kitchen}`);
+  const current = keys.includes(state.global.physical.selectedStore) ? state.global.physical.selectedStore : keys[0];
+  state.global.physical.selectedStore = current;
+  sel.innerHTML = rows.map(r => {
+    const key = `${r.country}|${r.kitchen}`;
+    return `<option value="${escapeHtml(key)}"${key === current ? " selected" : ""}>${r.flag} ${escapeHtml(r.kitchen)} (${escapeHtml(r.countryLabel)})</option>`;
+  }).join("");
+}
+
+function renderGlobalPhysicalWeeklyChart(key) {
+  const canvas = document.getElementById("globalPhysicalWeeklyChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  const weekly = (key && state.global.physical.weekly && state.global.physical.weekly[key]) || [];
+  const country = key ? key.split("|")[0] : "";
+  const rate = (COUNTRIES[country] && COUNTRIES[country].fxToUsd) || 1;
+  // Semanas siempre lunes-domingo (order_week ya viene del warehouse como el
+  // lunes de esa semana, y el fetch se alinea al lunes al armar el rango).
+  const labels = weekly.map(w => weekLabel(w.week));
+  const ranges = weekly.map(w => weekRangeLabel(w.week));
+  const posData = weekly.map(w => w.pos / rate);
+  const deliveryData = weekly.map(w => w.delivery / rate);
+  const showDelivery = state.global.physical.channelFilter !== "pos";
+  const showPos = state.global.physical.channelFilter !== "delivery";
+  const datasets = [];
+  if (showDelivery) datasets.push({ label: "Delivery (Rappi/Uber/DiDi)", data: deliveryData, backgroundColor: "#14225B", stack: "week" });
+  if (showPos) datasets.push({ label: "FoodologyPOS (mostrador)", data: posData, backgroundColor: "#DF99B9", stack: "week" });
+  if (state.global.physical.weeklyChart) { state.global.physical.weeklyChart.destroy(); state.global.physical.weeklyChart = null; }
+  state.global.physical.weeklyChart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, title: { display: true, text: "Semana (lunes)" } },
+        y: { stacked: true, beginAtZero: true, ticks: { callback: (v) => fmtUSD(v) } },
+      },
+      plugins: {
+        legend: { position: "bottom" },
+        tooltip: {
+          callbacks: {
+            title: (items) => `Semana ${ranges[items[0].dataIndex] || ""}`,
+            label: (ctx) => `${ctx.dataset.label}: ${fmtUSD(ctx.parsed.y)}`,
+          },
+        },
+      },
+    },
+  });
+}
+
+function globalPhysicalRowsToCSVLines(rows) {
+  const spec = globalPhysicalColumnsSpec();
+  const lines = [spec.map(c => csvEscape(c.header)).join(",")];
+  rows.forEach(r => {
+    const line = spec.map(c => {
+      if (c.growth) {
+        const pct = r[c.key + "Pct"], abs = r[c.key + "AbsUsd"];
+        if (pct === null || pct === undefined || !isFinite(pct)) return csvEscape("N/A");
+        return csvEscape(`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% (${abs >= 0 ? "+" : "-"}US$${fmtNum(Math.abs(abs))})`);
+      }
+      if (c.money) return csvEscape(Math.round(r[c.key]));
+      return csvEscape(r[c.key]);
+    });
+    lines.push(line.join(","));
+  });
+  return lines;
+}
+
+function exportGlobalPhysicalCSV() {
+  if (!state.global.physical.storeRows) return;
+  const lines = [`Puntos físicos consolidados — ${globalPhysicalChannelLabel()}, cifras en USD`, ""].concat(globalPhysicalRowsToCSVLines(state.global.physical.storeRows));
+  downloadCSV(`runrate_global_fisicos_usd_${state.hoy}.csv`, lines.join("\r\n"));
+}
+
+async function loadGlobalPhysicalView() {
+  document.getElementById("global-physical-store-container").innerHTML = '<div class="loading">Cargando datos del warehouse…</div>';
+  document.getElementById("global-physical-country-container").innerHTML = '<div class="loading">Cargando datos del warehouse…</div>';
+  const myToken = ++state.renderToken;
+  try {
+    await ensureGlobalPhysicalDetailData(state.lookbackWeeks);
+    if (myToken !== state.renderToken) return;
+    const { storeRows, countryRows } = computeGlobalPhysicalRows(state.lookbackWeeks);
+    state.global.physical.storeRows = storeRows;
+    state.global.physical.countryRows = countryRows;
+    renderGlobalPhysicalCountryTable(countryRows);
+    updateGlobalPhysicalStoreSelect(storeRows);
+    if (!storeRows.length) {
+      document.getElementById("global-physical-store-container").innerHTML = '<div class="loading">No se detectaron puntos físicos en ningún país.</div>';
+      document.getElementById("globalPhysicalKpiStrip").innerHTML = "";
+      document.getElementById("globalPhysicalInsightGrowth").innerHTML = '<div class="insight-empty">Sin datos.</div>';
+      document.getElementById("globalPhysicalInsightDecline").innerHTML = '<div class="insight-empty">Sin datos.</div>';
+      if (state.global.physical.chart) { state.global.physical.chart.destroy(); state.global.physical.chart = null; }
+      if (state.global.physical.weeklyChart) { state.global.physical.weeklyChart.destroy(); state.global.physical.weeklyChart = null; }
+      return;
+    }
+    renderGlobalPhysicalKPIs(storeRows);
+    renderGlobalPhysicalInsights(storeRows);
+    renderGlobalPhysicalStoreTable(storeRows);
+    renderGlobalPhysicalChart(storeRows);
+    renderGlobalPhysicalWeeklyChart(state.global.physical.selectedStore);
+    markUpdated();
+  } catch (e) {
+    if (myToken !== state.renderToken) return;
+    document.getElementById("global-physical-store-container").innerHTML = '<div class="loading">Error cargando datos: ' + e.message + '</div>';
+  }
+}
+
+async function onGlobalPhysicalChannelChange(e) {
+  state.global.physical.channelFilter = e.target.value;
+  localStorage.setItem("rr_globalPhysicalChannel", state.global.physical.channelFilter);
+  // El canal cambia el universo de datos base (mtd/dow); la tendencia semanal
+  // (delivery vs pos) no depende del filtro así que no hace falta invalidarla.
+  state.global.physical.mtdMap = null;
+  state.global.physical.dowMap = {};
+  await loadGlobalPhysicalView();
+}
+
+function selectGlobalTab(tab) {
+  state.globalTab = tab;
+  localStorage.setItem("rr_globalTab", tab);
+  document.querySelectorAll("#globalTabs .tab-btn").forEach(b => b.classList.toggle("active", b.dataset.gtab === tab));
+  document.getElementById("globalConsolidatedView").style.display = tab === "consolidated" ? "block" : "none";
+  document.getElementById("globalPhysicalView").style.display = tab === "physical" ? "block" : "none";
+  if (tab === "physical" && !state.global.physical.storeRows) {
+    loadGlobalPhysicalView();
+  }
+}
+
+// Cambia la ventana de cálculo del runrate (2 o 3 semanas) para la vista
+// global — comparte state.lookbackWeeks con las pestañas por país, así que
+// ambos selectores (el de aquí y el del dashboard por país) quedan en sync.
+async function selectGlobalLookback(weeks) {
+  state.lookbackWeeks = weeks;
+  localStorage.setItem("rr_lookbackWeeks", String(weeks));
+  document.querySelectorAll("#globalLookbackSeg .seg-btn").forEach(b => b.classList.toggle("active", parseInt(b.dataset.weeks,10) === weeks));
+  document.querySelectorAll("#lookbackSeg .seg-btn").forEach(b => b.classList.toggle("active", parseInt(b.dataset.weeks,10) === weeks));
+  if (state.globalTab === "physical") {
+    await loadGlobalPhysicalView();
+  } else {
+    await loadGlobalView();
+  }
+}
+
+// Reusa el mismo núcleo de cálculo de runrate que las pestañas por país
+// (computeRunrateBase), y luego convierte cada país a USD con su propio tipo
+// de cambio de referencia — es la única forma de sumar montos en monedas
+// distintas (MXN, COP, PEN) en un solo total consolidado.
+function computeGlobalRows(weeks) {
+  const mtdMap = state.global.mtdMap || {};
+  const dowMap = state.global.dowMap[weeks] || {};
+  const base = computeRunrateBase(mtdMap, dowMap);
+  const rows = base.map(r => {
+    const c = COUNTRIES[r.name];
+    const rate = (c && c.fxToUsd) || 1;
+    const toUsd = (v) => (v === null || v === undefined) ? v : v / rate;
+    return {
+      country: r.name,
+      label: (c && c.label) || r.name,
+      flag: (c && c.flag) || "",
+      runrateUsd: toUsd(r.runrate),
+      mtdUsd: toUsd(r.mtd),
+      mesAntUsd: toUsd(r.mesAnt),
+      mismoAntUsd: toUsd(r.mismoAnt),
+      crecMesAntPct: r.crecMesAntPct,
+      crecMesAntAbsUsd: toUsd(r.crecMesAntAbs),
+      crecMismoAntPct: r.crecMismoAntPct,
+      crecMismoAntAbsUsd: toUsd(r.crecMismoAntAbs),
+    };
+  });
+  rows.sort((a, b) => b.runrateUsd - a.runrateUsd);
+  return rows;
+}
+
+function fmtUSD(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  return sign + "US$" + abbreviateAmount(Math.abs(n));
+}
+function fmtGrowthUSD(pct, absUsd) {
+  if (pct === null || pct === undefined || !isFinite(pct)) return "N/A";
+  const sign = pct >= 0 ? "+" : "";
+  const cls = pct > 0 ? "pos" : (pct < 0 ? "neg" : "neutral");
+  const signAbs = absUsd >= 0 ? "+" : "-";
+  return `<span class="growth-pill ${cls}">${sign}${pct.toFixed(1)}% <span class="growth-abs">(${signAbs}US$${abbreviateAmount(Math.abs(absUsd))})</span></span>`;
+}
+
+function renderGlobalKPIs(rows) {
+  const strip = document.getElementById("globalKpiStrip");
+  const totalRunrate = rows.reduce((s, r) => s + r.runrateUsd, 0);
+  const totalMesAnt = rows.reduce((s, r) => s + r.mesAntUsd, 0);
+  const totalMismoAnt = rows.reduce((s, r) => s + r.mismoAntUsd, 0);
+  const crecMesAntAbs = totalRunrate - totalMesAnt;
+  const crecMesAntPct = totalMesAnt ? (crecMesAntAbs / totalMesAnt * 100) : null;
+  const crecMismoAntAbs = totalRunrate - totalMismoAnt;
+  const crecMismoAntPct = totalMismoAnt ? (crecMismoAntAbs / totalMismoAnt * 100) : null;
+  strip.innerHTML = `
+    <div class="tstat">
+      <div class="tlabel">Runrate global ${state.mesActualNombre}</div>
+      <div class="tvalue">${fmtUSD(totalRunrate)}</div>
+      <div class="tsub">México + Colombia + Perú, en USD</div>
+    </div>
+    <div class="tstat">
+      <div class="tlabel">Vs. mes anterior</div>
+      <div class="tvalue">${fmtGrowthUSD(crecMesAntPct, crecMesAntAbs)}</div>
+      <div class="tsub">${fmtUSD(totalMesAnt)}</div>
+    </div>
+    <div class="tstat">
+      <div class="tlabel">Vs. mismo mes año anterior</div>
+      <div class="tvalue">${fmtGrowthUSD(crecMismoAntPct, crecMismoAntAbs)}</div>
+      <div class="tsub">${fmtUSD(totalMismoAnt)}</div>
+    </div>
+  `;
+}
+
+function renderGlobalInsights(rows) {
+  const growthBox = document.getElementById("globalInsightGrowth");
+  const declineBox = document.getElementById("globalInsightDecline");
+  const eligible = rows.filter(r => r.crecMesAntPct !== null && isFinite(r.crecMesAntPct));
+  const itemHtml = (r) => `<div class="insight-item"><span class="insight-name">${r.flag} ${escapeHtml(r.label)}</span>${fmtGrowthUSD(r.crecMesAntPct, r.crecMesAntAbsUsd)}</div>`;
+  const best = [...eligible].sort((a, b) => b.crecMesAntPct - a.crecMesAntPct)[0];
+  const worst = [...eligible].sort((a, b) => a.crecMesAntPct - b.crecMesAntPct)[0];
+  growthBox.innerHTML = (best && best.crecMesAntPct > 0) ? itemHtml(best) : '<div class="insight-empty">Ningún país registra crecimiento vs. el mes anterior.</div>';
+  declineBox.innerHTML = (worst && worst.crecMesAntPct < 0) ? itemHtml(worst) : '<div class="insight-empty">Ningún país registra caída vs. el mes anterior.</div>';
+}
+
+// ---------- Drill-down por país (doble clic desde el consolidado global) ----------
+// Permite expandir cualquier fila de país de la tabla del consolidado y ver,
+// sin salir de la vista Global, los mismos insights de crecimiento/caída que
+// existen en el dashboard por país (ciudad, marca, cocina, provider) más un
+// resumen narrativo generado con IA. No usa state.country ni los filtros del
+// dashboard por país (city/kitchen/provider): son consultas independientes
+// parametrizadas por el país que se expande.
+
+async function fetchCountryDimMTD(country, dim) {
+  const col = DIMS[dim].column;
+  const excludeClause = dim === "provider"
+    ? ` AND ${col} NOT IN (${PROVIDER_EXCLUDE.map(p => `'${p}'`).join(", ")})`
+    : "";
+  const sql = `
+SELECT ${col} AS dim_value,
+ SUM(CASE WHEN order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}' THEN gmv ELSE 0 END) AS gmv_mtd,
+ SUM(CASE WHEN order_month = '${state.mesAnteriorInicio}' THEN gmv ELSE 0 END) AS gmv_mes_anterior,
+ SUM(CASE WHEN order_month = '${state.mismoAnioInicio}' THEN gmv ELSE 0 END) AS gmv_mismo_anio_anterior
+FROM fdgy_views.orders_consolidado
+WHERE country = '${country}' AND order_state IN ('Finalized', 'Canceled')${excludeClause}
+ AND ((order_day >= '${state.mesActualInicio}' AND order_day < '${state.hoy}')
+      OR order_month = '${state.mesAnteriorInicio}'
+      OR order_month = '${state.mismoAnioInicio}')
+GROUP BY ${col}`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const name = r.dim_value === null ? "(sin dato)" : r.dim_value;
+    map[name] = {
+      mtd: Number(r.gmv_mtd) || 0,
+      mesAnt: Number(r.gmv_mes_anterior) || 0,
+      mismoAnt: Number(r.gmv_mismo_anio_anterior) || 0,
+    };
+  });
+  return map;
+}
+
+async function fetchCountryDimDow(country, dim, weeks) {
+  const days = weeks * 7;
+  const lookbackStart = new Date(state.hoyDateObj);
+  lookbackStart.setDate(lookbackStart.getDate() - days);
+  const col = DIMS[dim].column;
+  const excludeClause = dim === "provider"
+    ? ` AND ${col} NOT IN (${PROVIDER_EXCLUDE.map(p => `'${p}'`).join(", ")})`
+    : "";
+  const sql = `
+SELECT ${col} AS dim_value, EXTRACT(dow FROM order_day) AS dow, SUM(gmv)/COUNT(DISTINCT order_day) AS avg_gmv_dow
+FROM fdgy_views.orders_consolidado
+WHERE order_day >= '${fmtDate(lookbackStart)}' AND order_day < '${state.hoy}'
+ AND country = '${country}' AND order_state IN ('Finalized', 'Canceled')${excludeClause}
+GROUP BY ${col}, EXTRACT(dow FROM order_day)`;
+  const data = await callSQL(sql);
+  const rows = rowsToArrays(data);
+  const map = {};
+  rows.forEach(r => {
+    const name = r.dim_value === null ? "(sin dato)" : r.dim_value;
+    if (!map[name]) map[name] = {};
+    map[name][Math.round(Number(r.dow))] = Number(r.avg_gmv_dow) || 0;
+  });
+  return map;
+}
+
+function ensureCountryDrilldownState(country) {
+  if (!state.global.drilldown.data[country]) {
+    state.global.drilldown.data[country] = { mtd: {}, dow: {}, summary: { text: null, loading: false, forWeeks: null } };
+  }
+  return state.global.drilldown.data[country];
+}
+
+async function ensureCountryDrilldownData(country, weeks) {
+  const d = ensureCountryDrilldownState(country);
+  const fetches = [];
+  DIM_ORDER.forEach(dim => {
+    if (!d.mtd[dim]) {
+      fetches.push(fetchCountryDimMTD(country, dim).then(m => { d.mtd[dim] = m; }));
+    }
+    if (!d.dow[dim]) d.dow[dim] = {};
+    if (!d.dow[dim][weeks]) {
+      fetches.push(fetchCountryDimDow(country, dim, weeks).then(m => { d.dow[dim][weeks] = m; }));
+    }
+  });
+  await Promise.all(fetches);
+}
+
+function computeCountryDimRows(country, dim, weeks) {
+  const d = state.global.drilldown.data[country];
+  const mtdMap = (d && d.mtd[dim]) || {};
+  const dowMap = (d && d.dow[dim] && d.dow[dim][weeks]) || {};
+  const rows = computeRunrateBase(mtdMap, dowMap);
+  rows.sort((a, b) => b.runrate - a.runrate);
+  return rows;
+}
+
+// Top crecimiento / top caída de una dimensión para un país — tanto por %
+// (la variación relativa más marcada) como por monto absoluto en USD (la
+// variación más grande en dólares, que puede ser una entidad distinta: algo
+// grande que crece poco % puede mover más plata que algo chico que se dispara
+// en %). Cada item incluye su % de participación sobre el runrate total del
+// país en esa dimensión.
+function computeDimInsight(country, dim, weeks) {
+  const rate = (COUNTRIES[country] && COUNTRIES[country].fxToUsd) || 1;
+  const rows = computeCountryDimRows(country, dim, weeks);
+  const totalRunrate = rows.reduce((s, r) => s + r.runrate, 0);
+  const eligible = rows.filter(r => (r.mesAnt / rate) >= DIM_INSIGHTS_MIN_USD && r.crecMesAntPct !== null && isFinite(r.crecMesAntPct));
+  const shareOf = (r) => totalRunrate ? (r.runrate / totalRunrate * 100) : 0;
+  const withShare = (r) => r ? { ...r, shareOfCountry: shareOf(r) } : null;
+
+  const bestPctRaw = [...eligible].sort((a, b) => b.crecMesAntPct - a.crecMesAntPct)[0];
+  const worstPctRaw = [...eligible].sort((a, b) => a.crecMesAntPct - b.crecMesAntPct)[0];
+  const bestAbsRaw = [...eligible].sort((a, b) => b.crecMesAntAbs - a.crecMesAntAbs)[0];
+  const worstAbsRaw = [...eligible].sort((a, b) => a.crecMesAntAbs - b.crecMesAntAbs)[0];
+
+  return {
+    rate,
+    bestPct: (bestPctRaw && bestPctRaw.crecMesAntPct > 0) ? withShare(bestPctRaw) : null,
+    worstPct: (worstPctRaw && worstPctRaw.crecMesAntPct < 0) ? withShare(worstPctRaw) : null,
+    bestAbs: (bestAbsRaw && bestAbsRaw.crecMesAntAbs > 0) ? withShare(bestAbsRaw) : null,
+    worstAbs: (worstAbsRaw && worstAbsRaw.crecMesAntAbs < 0) ? withShare(worstAbsRaw) : null,
+  };
+}
+
+function renderCountryDrilldown(country) {
+  const content = document.getElementById(`drilldown-content-${country}`);
+  if (!content) return;
+  const d = state.global.drilldown.data[country];
+  if (!d) return;
+  const weeks = state.lookbackWeeks;
+  if (d.summary.forWeeks !== weeks) { d.summary.text = null; d.summary.loading = false; }
+
+  const dimBlocks = DIM_ORDER.map(dim => {
+    const { bestPct, worstPct, bestAbs, worstAbs, rate } = computeDimInsight(country, dim, weeks);
+    const itemHtml = (r) => r
+      ? `<div class="insight-item"><span class="insight-name">${escapeHtml(r.name)}</span>${fmtGrowthUSD(r.crecMesAntPct, r.crecMesAntAbs / rate)}<span class="insight-caption">${r.shareOfCountry.toFixed(1)}% del runrate del país</span></div>`
+      : `<div class="insight-empty">Sin movimientos relevantes.</div>`;
+    return `
+      <div class="drilldown-dim-block">
+        <div class="drilldown-dim-title">${DIMS[dim].label}</div>
+        <div class="drilldown-dim-row2x2">
+          <div><div class="insights-sub">📈 Mayor crecimiento %</div>${itemHtml(bestPct)}</div>
+          <div><div class="insights-sub">📉 Mayor caída %</div>${itemHtml(worstPct)}</div>
+          <div><div class="insights-sub">💵 Mayor crecimiento $</div>${itemHtml(bestAbs)}</div>
+          <div><div class="insights-sub">💵 Mayor caída $</div>${itemHtml(worstAbs)}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  const summaryHtml = d.summary.text
+    ? escapeHtml(d.summary.text)
+    : (d.summary.loading ? '<span class="loading-inline">Generando resumen…</span>' : "");
+
+  content.innerHTML = `
+    <div class="drilldown-panel">
+      <div class="drilldown-summary" id="drilldown-summary-${country}">${summaryHtml}</div>
+      <div class="drilldown-dims-grid">${dimBlocks}</div>
+    </div>`;
+
+  if (!d.summary.text && !d.summary.loading) {
+    generateCountrySummary(country, weeks);
+  }
+}
+
+// Resumen narrativo de 2-3 frases (pedido explícitamente por Nico) generado
+// con IA a partir de los insights ya calculados client-side — no ejecuta SQL
+// nueva, solo sintetiza los números que ya se ven en las tarjetas.
+async function generateCountrySummary(country, weeks) {
+  const d = state.global.drilldown.data[country];
+  if (!d) return;
+  d.summary.loading = true;
+  d.summary.forWeeks = weeks;
+  const summaryEl = document.getElementById(`drilldown-summary-${country}`);
+  if (summaryEl) summaryEl.innerHTML = '<span class="loading-inline">Generando resumen…</span>';
+
+  const c = COUNTRIES[country];
+  const asPayloadItem = (r, rate) => r
+    ? { nombre: r.name, pct: Number(r.crecMesAntPct.toFixed(1)), usd: Math.round(r.crecMesAntAbs / rate) }
+    : null;
+  const payload = DIM_ORDER.map(dim => {
+    const { bestPct, worstPct, bestAbs, worstAbs, rate } = computeDimInsight(country, dim, weeks);
+    return {
+      dimension: DIMS[dim].label,
+      top_crecimiento_pct: asPayloadItem(bestPct, rate),
+      top_caida_pct: asPayloadItem(worstPct, rate),
+      top_crecimiento_usd: asPayloadItem(bestAbs, rate),
+      top_caida_usd: asPayloadItem(worstAbs, rate),
+    };
+  });
+
+  let text;
+  try {
+    const prompt = `Eres analista de datos para el CEO de Foodology. Con estos datos de ${(c && c.label) || country} ` +
+      `(top movimientos de crecimiento y caída del runrate del mes vs. mes anterior, por dimensión, tanto por % ` +
+      `como por monto absoluto en USD — pueden ser entidades distintas, algo grande que crece poco % puede mover ` +
+      `más plata que algo chico que se dispara en %), escribe un resumen ejecutivo de máximo 3-4 frases en español, ` +
+      `directo y sin rodeos. No listes mecánicamente todos los números — prioriza la historia: qué está impulsando ` +
+      `el crecimiento del país y qué lo está frenando, distinguiendo cuando el mayor impacto en dólares no coincide ` +
+      `con el mayor cambio porcentual. Si una dimensión no tiene datos suficientes, ignórala. Datos JSON:\n${JSON.stringify(payload)}`;
+    const response = await askClaude(prompt);
+    text = asText(response).trim();
+  } catch (e) {
+    text = "No fue posible generar el resumen automático (" + e.message + ").";
+  }
+
+  // Si mientras se generaba el resumen el usuario cambió la ventana de cálculo,
+  // este resultado ya no aplica — se descarta para no mostrar un texto stale.
+  if (d.summary.forWeeks !== weeks) return;
+  d.summary.text = text;
+  d.summary.loading = false;
+  const el = document.getElementById(`drilldown-summary-${country}`);
+  if (el) el.textContent = text;
+}
+
+async function loadCountryDrilldown(country) {
+  const content = document.getElementById(`drilldown-content-${country}`);
+  if (!content) return;
+  ensureCountryDrilldownState(country);
+  content.innerHTML = '<div class="loading">Cargando detalle…</div>';
+  const weeks = state.lookbackWeeks;
+  try {
+    await ensureCountryDrilldownData(country, weeks);
+    // Si mientras cargaba se cerró el panel o se salió de la vista Global, no pintar.
+    if (!state.global.drilldown.open[country] || state.country !== "GLOBAL" || state.globalTab !== "consolidated") return;
+    renderCountryDrilldown(country);
+  } catch (e) {
+    if (state.global.drilldown.open[country]) {
+      content.innerHTML = '<div class="loading">Error cargando detalle: ' + e.message + '</div>';
+    }
+  }
+}
+
+function toggleCountryDrilldown(country) {
+  const willOpen = !state.global.drilldown.open[country];
+  state.global.drilldown.open[country] = willOpen;
+  const row = document.getElementById(`drilldown-row-${country}`);
+  const chevron = document.getElementById(`drilldown-chevron-${country}`);
+  if (row) row.style.display = willOpen ? "table-row" : "none";
+  if (chevron) chevron.textContent = willOpen ? "▾" : "▸";
+  if (willOpen) loadCountryDrilldown(country);
+}
+
+function renderGlobalTable(rows) {
+  const totalRunrate = rows.reduce((s, r) => s + r.runrateUsd, 0);
+  const container = document.getElementById("global-table-container");
+  const body = rows.map(r => {
+    const share = totalRunrate ? (r.runrateUsd / totalRunrate * 100) : 0;
+    const isOpen = !!state.global.drilldown.open[r.country];
+    return `
+      <tr class="country-row" data-country="${r.country}" title="Clic para ver el detalle de ${escapeHtml(r.label)}">
+        <td>
+          <div class="global-country-name"><span class="drilldown-chevron" id="drilldown-chevron-${r.country}">${isOpen ? "▾" : "▸"}</span><span class="flag">${r.flag}</span>${escapeHtml(r.label)}</div>
+          <div class="global-share-bar"><div style="width:${share.toFixed(1)}%"></div></div>
+        </td>
+        <td><strong>${fmtUSD(r.runrateUsd)}</strong></td>
+        <td>${share.toFixed(1)}%</td>
+        <td>${fmtUSD(r.mesAntUsd)}</td>
+        <td>${fmtUSD(r.mismoAntUsd)}</td>
+        <td>${fmtGrowthUSD(r.crecMesAntPct, r.crecMesAntAbsUsd)}</td>
+        <td>${fmtGrowthUSD(r.crecMismoAntPct, r.crecMismoAntAbsUsd)}</td>
+      </tr>
+      <tr class="drilldown-row" id="drilldown-row-${r.country}" style="display:${isOpen ? "table-row" : "none"}">
+        <td colspan="7"><div id="drilldown-content-${r.country}"></div></td>
+      </tr>`;
+  }).join("");
+  container.innerHTML = `
+    <table class="global-country-table">
+      <thead><tr>
+        <th>País</th><th>RR ${state.mesActualNombre}</th><th>% del total</th>
+        <th>GMV Last Month</th><th>GMV Last Year</th><th>Crec vs LM</th><th>Crec vs LY</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+  // Si algún país ya estaba desplegado (ej. tras un refresh diario o un
+  // cambio de ventana de cálculo), se recarga su contenido de inmediato.
+  GLOBAL_COUNTRY_CODES.forEach(code => {
+    if (state.global.drilldown.open[code]) loadCountryDrilldown(code);
+  });
+}
+
+function renderGlobalChart(rows) {
+  const canvas = document.getElementById("globalChart");
+  if (!canvas || typeof Chart === "undefined") return;
+  if (state.global.chart) { state.global.chart.destroy(); state.global.chart = null; }
+  state.global.chart = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: rows.map(r => `${r.flag} ${r.label}`),
+      datasets: [{ label: `Runrate ${state.mesActualNombre} (USD)`, data: rows.map(r => r.runrateUsd), backgroundColor: ["#14225B", "#DF99B9", "#E8D2AE"] }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { callback: (v) => fmtUSD(v) } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => fmtUSD(ctx.parsed.y) } } },
+    },
+  });
+}
+
+function renderGlobalPhysicalNote() {
+  const note = document.getElementById("globalPhysicalNote");
+  const counts = state.global.physicalCounts || {};
+  const total = GLOBAL_COUNTRY_CODES.reduce((s, c) => s + (counts[c] || 0), 0);
+  const perCountry = GLOBAL_COUNTRY_CODES.map(c => `${COUNTRIES[c].flag} ${COUNTRIES[c].label}: ${counts[c] || 0}`).join(" · ");
+  note.innerHTML = `<strong>${total} puntos físicos</strong> detectados en total (venta FoodologyPOS en ≥${PHYSICAL_MIN_POS_DAYS} de los últimos 30 días) — ${perCountry}.`;
+}
+
+function globalRowsToCSVLines(rows) {
+  const totalRunrate = rows.reduce((s, r) => s + r.runrateUsd, 0);
+  const header = ["País", `RR ${state.mesActualNombre} (USD)`, "% del total", "GMV Last Month (USD)", "GMV Last Year (USD)", "Crec vs LM %", "Crec vs LY %"];
+  const lines = [header.map(csvEscape).join(",")];
+  rows.forEach(r => {
+    const share = totalRunrate ? (r.runrateUsd / totalRunrate * 100) : 0;
+    lines.push([
+      csvEscape(r.label),
+      csvEscape(Math.round(r.runrateUsd)),
+      csvEscape(share.toFixed(1) + "%"),
+      csvEscape(Math.round(r.mesAntUsd)),
+      csvEscape(Math.round(r.mismoAntUsd)),
+      csvEscape(r.crecMesAntPct === null ? "N/A" : r.crecMesAntPct.toFixed(1) + "%"),
+      csvEscape(r.crecMismoAntPct === null ? "N/A" : r.crecMismoAntPct.toFixed(1) + "%"),
+    ].join(","));
+  });
+  return lines;
+}
+
+function exportGlobalCSV() {
+  if (!state.global.rows) return;
+  const lines = ["Consolidado global — cifras en USD", ""].concat(globalRowsToCSVLines(state.global.rows));
+  downloadCSV(`runrate_global_usd_${state.hoy}.csv`, lines.join("\r\n"));
+}
+
+async function loadGlobalView() {
+  document.getElementById("global-table-container").innerHTML = '<div class="loading">Cargando datos del warehouse…</div>';
+  const myToken = ++state.renderToken;
+  try {
+    await ensureGlobalData(state.lookbackWeeks);
+    if (myToken !== state.renderToken) return;
+    const rows = computeGlobalRows(state.lookbackWeeks);
+    state.global.rows = rows;
+    renderGlobalKPIs(rows);
+    renderGlobalInsights(rows);
+    renderGlobalTable(rows);
+    renderGlobalChart(rows);
+    renderGlobalPhysicalNote();
+    markUpdated();
+  } catch (e) {
+    if (myToken !== state.renderToken) return;
+    document.getElementById("global-table-container").innerHTML = '<div class="loading">Error cargando datos: ' + e.message + '</div>';
+  }
+}
+
+async function selectGlobal() {
+  state.country = "GLOBAL";
+  localStorage.setItem("rr_country", "GLOBAL");
+  invalidateAllDataCaches();
+  showGlobal();
+  if (!state.hoy) await bootstrapDates();
+  document.getElementById("globalSubtitle").textContent =
+    `Corte al ${state.hoy} · Mes en curso: ${state.mesActualNombre}` +
+    (state.dataFreshnessNote ? ` · ${state.dataFreshnessNote}` : "");
+  await loadGlobalView();
+  selectGlobalTab(state.globalTab);
+  scheduleDailyBogotaRefresh();
+}
+
+// ---------- Tabs & lookback ----------
+// renderToken guards against race conditions: if the user switches tabs or the
+// lookback window again before a previous fetch resolves, the stale response
+// must not overwrite whatever the user is looking at now.
+async function selectDim(dim) {
+  const myToken = ++state.renderToken;
+  state.activeDim = dim;
+  localStorage.setItem("rr_activeDim", dim);
+  document.querySelectorAll("#tabs .tab-btn").forEach(b => b.classList.toggle("active", b.dataset.dim === dim));
+
+  if (dim === "chat") {
+    document.getElementById("tableView").style.display = "none";
+    document.getElementById("physicalView").style.display = "none";
+    document.getElementById("chatView").style.display = "block";
+    document.getElementById("lookbackWrap").style.display = "none";
+    document.getElementById("currencyWrap").style.display = "none";
+    document.getElementById("totalsStrip").style.display = "none";
+    document.getElementById("insightsCard").classList.remove("show");
+    document.getElementById("filtersBar").style.display = "none";
+    document.getElementById("sectionNote").textContent = "";
+    document.getElementById("status").textContent = "";
+    return;
+  }
+
+  if (dim === "physical") {
+    document.getElementById("tableView").style.display = "none";
+    document.getElementById("chatView").style.display = "none";
+    document.getElementById("physicalView").style.display = "block";
+    document.getElementById("lookbackWrap").style.display = "flex";
+    document.getElementById("currencyWrap").style.display = "flex";
+    document.getElementById("totalsStrip").style.display = "none";
+    document.getElementById("insightsCard").classList.remove("show");
+    document.getElementById("filtersBar").style.display = "none";
+    document.getElementById("sectionNote").textContent = "";
+    await loadPhysicalTab();
+    return;
+  }
+
+  document.getElementById("tableView").style.display = "block";
+  document.getElementById("chatView").style.display = "none";
+  document.getElementById("physicalView").style.display = "none";
+  document.getElementById("lookbackWrap").style.display = "flex";
+  document.getElementById("currencyWrap").style.display = "flex";
+  document.getElementById("totalsStrip").style.display = "flex";
+  document.getElementById("filtersBar").style.display = "flex";
+  updateFilterVisibility(dim);
+
+  document.getElementById("status").textContent = "Cargando " + DIMS[dim].label.toLowerCase() + "…";
+  document.getElementById("grid-container").innerHTML = '<div class="loading">Cargando datos del warehouse…</div>';
+  try {
+    await ensureDimData(dim, state.lookbackWeeks);
+    if (myToken !== state.renderToken) return; // se cambió de pestaña mientras cargaba
+    renderTable(dim, state.lookbackWeeks);
+    markUpdated();
+    document.getElementById("status").textContent = "Actualizado";
+  } catch (e) {
+    if (myToken !== state.renderToken) return;
+    document.getElementById("insightsCard").classList.remove("show");
+    document.getElementById("grid-container").innerHTML = '<div class="loading">Error cargando datos: ' + e.message + '</div>';
+    document.getElementById("status").textContent = "Error";
+  }
+}
+
+async function selectLookback(weeks) {
+  const myToken = ++state.renderToken;
+  const dim = state.activeDim;
+  state.lookbackWeeks = weeks;
+  localStorage.setItem("rr_lookbackWeeks", String(weeks));
+  document.querySelectorAll("#lookbackSeg .seg-btn").forEach(b => b.classList.toggle("active", parseInt(b.dataset.weeks,10) === weeks));
+  document.querySelectorAll("#globalLookbackSeg .seg-btn").forEach(b => b.classList.toggle("active", parseInt(b.dataset.weeks,10) === weeks));
+  document.getElementById("status").textContent = "Recalculando con " + weeks + " semanas…";
+
+  if (dim === "physical") {
+    document.getElementById("physical-grid-container").innerHTML = '<div class="loading">Recalculando…</div>';
+    try {
+      await ensurePhysicalData(weeks);
+      if (myToken !== state.renderToken || state.activeDim !== dim) return;
+      const rows = computePhysicalRows(weeks);
+      state.physical.rows = rows;
+      renderPhysicalTable(rows);
+      markUpdated();
+      document.getElementById("status").textContent = "Actualizado";
+    } catch (e) {
+      if (myToken !== state.renderToken || state.activeDim !== dim) return;
+      document.getElementById("physical-grid-container").innerHTML = '<div class="loading">Error cargando datos: ' + e.message + '</div>';
+      document.getElementById("status").textContent = "Error";
+    }
+    return;
+  }
+
+  document.getElementById("grid-container").innerHTML = '<div class="loading">Recalculando…</div>';
+  try {
+    await ensureDimData(dim, weeks);
+    if (myToken !== state.renderToken || state.activeDim !== dim) return;
+    renderTable(dim, weeks);
+    markUpdated();
+    document.getElementById("status").textContent = "Actualizado";
+  } catch (e) {
+    if (myToken !== state.renderToken || state.activeDim !== dim) return;
+    document.getElementById("grid-container").innerHTML = '<div class="loading">Error cargando datos: ' + e.message + '</div>';
+    document.getElementById("status").textContent = "Error";
+  }
+}
+
+function selectCurrency(currency) {
+  state.currency = currency;
+  localStorage.setItem("rr_currency", currency);
+  document.querySelectorAll("#currencySeg .seg-btn").forEach(b => b.classList.toggle("active", b.dataset.currency === currency));
+  if (state.activeDim === "physical" && state.physical.rows) {
+    renderPhysicalTable(state.physical.rows);
+    return;
+  }
+  if (DIMS[state.activeDim] && state.lastRows[state.activeDim]) {
+    renderTable(state.activeDim, state.lookbackWeeks);
+  }
+}
+
+async function init() {
+  document.querySelectorAll(".home-card").forEach(card => {
+    card.addEventListener("click", () => selectCountry(card.dataset.country));
+  });
+  document.getElementById("homeGlobalBtn").addEventListener("click", selectGlobal);
+  document.getElementById("changeCountryBtn").addEventListener("click", goHome);
+  document.getElementById("globalBackBtn").addEventListener("click", goHome);
+  document.getElementById("globalExportBtn").addEventListener("click", exportGlobalCSV);
+  document.getElementById("globalPhysicalExportBtn").addEventListener("click", exportGlobalPhysicalCSV);
+  document.getElementById("globalTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab-btn");
+    if (btn) selectGlobalTab(btn.dataset.gtab);
+  });
+  document.getElementById("globalLookbackSeg").addEventListener("click", (e) => {
+    const btn = e.target.closest(".seg-btn");
+    if (btn) selectGlobalLookback(parseInt(btn.dataset.weeks, 10));
+  });
+  // Delegado: la tabla del consolidado global se re-pinta por completo en
+  // cada carga, así que el listener se ata una sola vez al contenedor fijo
+  // en vez de a cada <tr>.country-row (que se recrea con cada render).
+  document.getElementById("global-table-container").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr.country-row");
+    if (tr) toggleCountryDrilldown(tr.dataset.country);
+  });
+
+  document.getElementById("tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab-btn");
+    if (btn) selectDim(btn.dataset.dim);
+  });
+  document.getElementById("lookbackSeg").addEventListener("click", (e) => {
+    const btn = e.target.closest(".seg-btn");
+    if (btn) selectLookback(parseInt(btn.dataset.weeks, 10));
+  });
+  document.getElementById("currencySeg").addEventListener("click", (e) => {
+    const btn = e.target.closest(".seg-btn");
+    if (btn) selectCurrency(btn.dataset.currency);
+  });
+  document.getElementById("exportTabBtn").addEventListener("click", exportCurrentTab);
+  document.getElementById("exportAllBtn").addEventListener("click", exportAll);
+  document.getElementById("exportPhysicalBtn").addEventListener("click", exportPhysicalCSV);
+  document.getElementById("chatSend").addEventListener("click", sendChat);
+  document.getElementById("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
+  renderSuggestions();
+
+  document.getElementById("filterCity").addEventListener("change", onFilterChange);
+  document.getElementById("filterKitchen").addEventListener("change", onFilterChange);
+  document.getElementById("filterProvider").addEventListener("change", onFilterChange);
+  document.getElementById("filtersClearBtn").addEventListener("click", clearFilters);
+
+  const autoRefreshToggle = document.getElementById("autoRefreshToggle");
+  autoRefreshToggle.checked = state.autoRefresh;
+  autoRefreshToggle.addEventListener("change", (e) => {
+    state.autoRefresh = e.target.checked;
+    localStorage.setItem("rr_autoRefresh", state.autoRefresh ? "1" : "0");
+  });
+
+  // physicalKitchenSelect ya no trae opciones fijas en el HTML: se rellena
+  // dinámicamente (updatePhysicalKitchenSelect) según el país activo.
+  document.getElementById("physicalKitchenSelect").addEventListener("change", (e) => {
+    state.physical.selectedKitchen = e.target.value;
+    renderPhysicalChart(e.target.value);
+    renderPhysicalWeeklyChart(e.target.value);
+  });
+  document.getElementById("physicalChannelFilter").value = state.physical.channelFilter;
+  document.getElementById("physicalChannelFilter").addEventListener("change", onPhysicalChannelChange);
+
+  document.getElementById("globalPhysicalChannelFilter").value = state.global.physical.channelFilter;
+  document.getElementById("globalPhysicalChannelFilter").addEventListener("change", onGlobalPhysicalChannelChange);
+  // globalPhysicalWeeklyStoreSelect ya no trae opciones fijas en el HTML: se
+  // rellena dinámicamente (updateGlobalPhysicalStoreSelect) tras cargar datos.
+  document.getElementById("globalPhysicalWeeklyStoreSelect").addEventListener("change", (e) => {
+    state.global.physical.selectedStore = e.target.value;
+    renderGlobalPhysicalWeeklyChart(e.target.value);
+  });
+
+  document.querySelectorAll("#lookbackSeg .seg-btn").forEach(b => b.classList.toggle("active", parseInt(b.dataset.weeks,10) === state.lookbackWeeks));
+  document.querySelectorAll("#globalLookbackSeg .seg-btn").forEach(b => b.classList.toggle("active", parseInt(b.dataset.weeks,10) === state.lookbackWeeks));
+  document.querySelectorAll("#currencySeg .seg-btn").forEach(b => b.classList.toggle("active", b.dataset.currency === state.currency));
+  document.querySelectorAll("#tabs .tab-btn").forEach(b => b.classList.toggle("active", b.dataset.dim === state.activeDim));
+  document.querySelectorAll("#globalTabs .tab-btn").forEach(b => b.classList.toggle("active", b.dataset.gtab === state.globalTab));
+
+  // Si ya había un país guardado de una sesión anterior, se salta el home y se
+  // carga directo su dashboard; si no, se muestra el selector de país primero.
+  if (state.country === "GLOBAL") {
+    try {
+      await bootstrapDates();
+      showGlobal();
+      document.getElementById("globalSubtitle").textContent = `Corte al ${state.hoy} · Mes en curso: ${state.mesActualNombre}` +
+        (state.dataFreshnessNote ? ` · ${state.dataFreshnessNote}` : "");
+      await loadGlobalView();
+      selectGlobalTab(state.globalTab);
+      scheduleDailyBogotaRefresh();
+    } catch (e) {
+      document.getElementById("globalSubtitle").textContent = "Error inicializando: " + e.message;
+    }
+  } else if (state.country && COUNTRIES[state.country]) {
+    try {
+      await bootstrapDates();
+      applyCountryUI();
+      showDashboard();
+      loadFilterOptions().catch(e => console.error("No se pudieron cargar las opciones de filtro:", e));
+      await selectDim(state.activeDim === "chat" ? "city" : state.activeDim);
+      scheduleDailyBogotaRefresh();
+    } catch (e) {
+      document.getElementById("subtitle").textContent = "Error inicializando: " + e.message;
+      document.getElementById("grid-container").innerHTML = '<div class="loading">No se pudo conectar al warehouse. Usa el botón Reload.</div>';
+    }
+  } else {
+    showHome();
+  }
+}
+
+init();
+</script>
+</body>
+</html>
