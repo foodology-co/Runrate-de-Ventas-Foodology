@@ -1,9 +1,7 @@
-# Runrate de Ventas Foodology — dashboard standalone
+# Runrate Mexico Live — dashboard standalone
 
 Convertido desde un artefacto de Cowork. Ya no depende de `window.cowork.*`:
-todo pasa por un backend propio (`server.js`).
-
-Repo: `github.com/foodology-co/Runrate-de-Ventas-Foodology`
+todo pasa por un backend propio (`server.js`) que este ZIP incluye.
 
 ## Qué cambió respecto al artefacto original
 
@@ -19,25 +17,30 @@ Repo: `github.com/foodology-co/Runrate-de-Ventas-Foodology`
     configura `ANTHROPIC_API_KEY`, el resto del dashboard funciona igual,
     solo el chat muestra un error.
 - `render.yaml`, `package.json`, `.gitignore`, `.env.example` — para desplegar
-  en Render.
+  en Render como Blueprint.
 
-## 1. Subir los cambios a GitHub
-
-Esta carpeta ya está clonada y con el remoto configurado
-(`origin` → `github.com/foodology-co/Runrate-de-Ventas-Foodology.git`), así
-que solo falta commitear y pushear el contenido:
+## 1. Subir a GitHub
 
 ```bash
-cd "Runrate de Ventas Foodology"
+cd runrate-mexico-live   # esta carpeta descomprimida
+git init
 git add .
-git commit -m "App standalone: front-end + backend Express para Render"
-git push origin main
+git commit -m "Runrate Mexico Live standalone"
+git branch -M main
+git remote add origin <URL_DEL_REPO_DE_DASHBOARDS>
+git push -u origin main
 ```
+
+Si va dentro de un repo de dashboards ya existente (varios dashboards en el
+mismo repo), copia el contenido de esta carpeta a una subcarpeta propia
+(ej. `runrate-mexico-live/`) en vez de a la raíz, y ajusta `rootDir` en
+Render (paso 2) a esa ruta.
 
 ## 2. Desplegar en Render
 
 **Opción rápida (Blueprint):** en Render → New → Blueprint, apunta al repo.
-Render lee `render.yaml` y crea el servicio solo.
+Render lee `render.yaml` y crea el servicio solo. Si el proyecto vive en una
+subcarpeta del repo, agrega `rootDir: nombre-carpeta` dentro de `render.yaml`.
 
 **Opción manual:** New → Web Service → conectar el repo →
 - Build command: `npm install`
@@ -48,20 +51,15 @@ servicio y cargar los valores reales (Render no los toma de `render.yaml`
 por seguridad, solo los nombres):
 
 - `REDSHIFT_HOST`, `REDSHIFT_PORT` (5439 por defecto), `REDSHIFT_DB`,
-  `REDSHIFT_USER`, `REDSHIFT_PASSWORD`.
+  `REDSHIFT_USER`, `REDSHIFT_PASSWORD` — pídelos al equipo de datos/IT (yo
+  solo tengo acceso al warehouse a través del conector MCP, no a las
+  credenciales crudas).
 - `ANTHROPIC_API_KEY` — opcional, solo si quieren que funcione el tab de
   chat/resúmenes con IA.
 
 Redshift normalmente vive en una VPC privada — si Render no puede alcanzarlo
 por IP pública, van a necesitar abrir el security group al rango de salida
-de Render o usar un túnel/proxy.
-
-⚠️ **Las credenciales van solo en Environment de Render (o en GitHub → repo →
-Settings → Secrets, si las usa un GitHub Action), nunca committeadas en el
-repo.** Si en algún momento un `.env` con valores reales quedó en un commit,
-hay que rotar esas credenciales y limpiar el historial (`git filter-repo` /
-BFG), no basta con borrar el archivo en un commit nuevo — sobre todo siendo
-este un repo público.
+de Render o usar un túnel/proxy (pregúntenle a IT).
 
 ## 3. Editar después con Claude Code
 
