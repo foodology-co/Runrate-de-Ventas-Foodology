@@ -740,7 +740,7 @@ function fmtNum(n) {
 // número completo con separadores de miles (ya es corto).
 function abbreviateAmount(nonNegativeValue) {
   if (nonNegativeValue >= 1000000) {
-    return (nonNegativeValue / 1000000).toFixed(1) + "M";
+    return (nonNegativeValue / 1000000).toFixed(2) + "M";
   }
   return fmtNum(nonNegativeValue);
 }
